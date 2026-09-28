@@ -27,6 +27,11 @@ h2 {
   margin: 0 0 8px;
 }
 
+h3 {
+  font-size: 0.95rem;
+  margin: 24px 0 4px;
+}
+
 .muted {
   color: #767676;
   font-size: 0.9rem;
@@ -35,4 +40,74 @@ h2 {
 
 section {
   margin-top: 32px;
+}
+
+.section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+/* Segmented control, styled after Apple's Fitness/Health range pickers */
+.segmented {
+  display: inline-flex;
+  background: rgba(118, 118, 128, 0.12);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.segmented button {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  .segmented button.active {
+    background: #48484a;
+  }
+}
+
+.data-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.data-table th,
+.data-table td {
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(118, 118, 128, 0.2);
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  text-align: left;
+}
+
+.zone-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
 }

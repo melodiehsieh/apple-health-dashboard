@@ -13,45 +13,46 @@
       </header>
       <main>
         <section>
-          <h2>Running pace by heart-rate zone</h2>
+          <div class="section-header">
+            <h2>Running pace by heart-rate zone</h2>
+            <div id="pace-view-toggle" class="segmented">
+              <button data-mode="graph" class="active">Graph</button>
+              <button data-mode="table">Table</button>
+            </div>
+          </div>
           <p class="muted">
             Average pace at each HR zone, by month &mdash; every 15-second sample from
             every run is tagged by the zone your heart rate was actually in at that
             moment, so a run's warmup/tempo/cooldown segments each count toward their
             own zone instead of averaging into one misleading number.
           </p>
-          <div id="pace-by-zone-chart"></div>
+          <div id="pace-by-zone-view"></div>
         </section>
 
         <section>
-          <h2>Activity rings</h2>
-          <p class="muted">Monthly averages from Apple's daily Activity summary.</p>
+          <div class="section-header">
+            <h2>Health trends</h2>
+            <div id="trend-range-selector" class="segmented">
+              <button data-range="month">Past Month</button>
+              <button data-range="ytd">YTD</button>
+              <button data-range="year">1 Year</button>
+              <button data-range="all" class="active">All Time</button>
+            </div>
+          </div>
+
+          <h3>Activity rings</h3>
+          <p class="muted">From Apple's daily Activity summary.</p>
           <div id="active-energy-chart"></div>
           <div id="exercise-time-chart"></div>
           <div id="stand-hours-chart"></div>
-        </section>
 
-        <section>
-          <h2>Steps</h2>
-          <p class="muted">Total steps per month.</p>
+          <h3>Steps</h3>
           <div id="steps-chart"></div>
-        </section>
 
-        <section>
-          <h2>Body weight</h2>
-          <p class="muted">Monthly average, lb.</p>
-          <div id="body-mass-chart"></div>
-        </section>
-
-        <section>
-          <h2>Resting heart rate</h2>
-          <p class="muted">Monthly average, bpm.</p>
+          <h3>Resting heart rate</h3>
           <div id="resting-hr-chart"></div>
-        </section>
 
-        <section>
-          <h2>VO2 max</h2>
-          <p class="muted">Monthly average, mL/min&middot;kg.</p>
+          <h3>VO2 max</h3>
           <div id="vo2-max-chart"></div>
         </section>
       </main>
