@@ -310,12 +310,13 @@ function renderRouteComparison(data: SiteData) {
 }
 
 // ---- Run frequency/volume: bar charts of run count and total mileage
-// per period. Past Month buckets by week (not day, like every other
-// chart's Past Month view) since a single day's bar is either "1 run" or
-// empty and isn't useful at that granularity. ----
+// per period. Always monthly, except Past Month, which buckets by week
+// (not day, like every other chart's Past Month view) since a single
+// day's bar is either "1 run" or empty and isn't useful at that
+// granularity. ----
 
 function runsChartBucket(range: Range): Bucket {
-  return range === "month" ? "week" : RANGE_CONFIG[range].bucket;
+  return range === "month" ? "week" : "month";
 }
 
 function renderBarChart(containerId: string, series: TimeSeriesPoint[], yLabel: string, bucket: Bucket, fmt: (v: number) => string) {
@@ -336,7 +337,7 @@ function renderBarChart(containerId: string, series: TimeSeriesPoint[], yLabel: 
       Plot.barY(series, { x: "period", y: "value", fill: "#3E7C7B" }),
       Plot.tip(
         series,
-        Plot.pointer({
+        Plot.pointerX({
           x: "period",
           y: "value",
           title: (d: TimeSeriesPoint) => `${formatPeriod(d.period, bucket)}\n${yLabel}: ${fmt(d.value)}`,
