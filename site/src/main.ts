@@ -61,6 +61,122 @@ function renderPaceByZoneChart(data: PaceByZoneRow[]) {
   el.append(plot);
 }
 
+type MonthlyPoint = { month: Date; value: number };
+
+async function loadMonthlySeries(
+  file: string,
+  valueExpr: string,
+  agg: "avg" | "sum",
+  dateExpr = "start_ts",
+): Promise<MonthlyPoint[]> {
+  await registerParquet(file);
+  const rows = await query<{ month: string; value: number }>(`
+    SELECT
+      date_trunc('month', ${dateExpr}) AS month,
+      ${agg}(${valueExpr}) AS value
+    FROM read_parquet('${file}')
+    WHERE ${valueExpr} IS NOT NULL
+      AND ${dateExpr} <= current_date  -- a handful of Apple Health exports carry stray future-dated placeholder rows
+    GROUP BY month
+    ORDER BY month
+  `);
+  return rows.map((r) => ({ month: new Date(r.month), value: r.value }));
+}
+
+function renderMonthlySeries(containerId: string, data: MonthlyPoint[], yLabel: string) {
+  const el = document.querySelector<HTMLDivElement>(`#${containerId}`)!;
+  if (data.length === 0) {
+    el.innerHTML = `<p class="muted">No data.</p>`;
+    return;
+  }
+  const plot = Plot.plot({
+    width: Math.min(880, document.body.clientWidth - 48),
+    height: 220,
+    marginLeft: 60,
+    x: { label: null },
+    y: { label: yLabel, grid: true },
+    marks: [
+      Plot.lineY(data, { x: "month", y: "value", curve: "monotone-x" }),
+      Plot.dot(data, { x: "month", y: "value", r: 2.5 }),
+    ],
+  });
+  el.innerHTML = "";
+  el.append(plot);
+}
+
+// DuckDB-WASM's virtual filesystem misbehaves ("no magic bytes found") when
+// several registerFileBuffer + query calls race concurrently, so these run
+// one at a time -- plenty fast for this data size, and it renders each
+// chart as soon as its own data is ready instead of waiting on the rest.
+const BASIC_ANALYTICS_CHARTS: Array<{
+  containerId: string;
+  file: string;
+  valueExpr: string;
+  agg: "avg" | "sum";
+  dateExpr?: string;
+  yLabel: string;
+}> = [
+  {
+    containerId: "active-energy-chart",
+    file: "activity_summary.parquet",
+    valueExpr: "active_energy",
+    agg: "avg",
+    dateExpr: "CAST(date AS DATE)",
+    yLabel: "active energy (cal/day)",
+  },
+  {
+    containerId: "exercise-time-chart",
+    file: "activity_summary.parquet",
+    valueExpr: "exercise_time",
+    agg: "avg",
+    dateExpr: "CAST(date AS DATE)",
+    yLabel: "exercise time (min/day)",
+  },
+  {
+    containerId: "stand-hours-chart",
+    file: "activity_summary.parquet",
+    valueExpr: "stand_hours",
+    agg: "avg",
+    dateExpr: "CAST(date AS DATE)",
+    yLabel: "stand hours/day",
+  },
+  {
+    containerId: "steps-chart",
+    file: "step_count.parquet",
+    valueExpr: "CAST(value AS DOUBLE)",
+    agg: "sum",
+    yLabel: "total steps",
+  },
+  {
+    containerId: "body-mass-chart",
+    file: "body_mass.parquet",
+    valueExpr: "CAST(value AS DOUBLE)",
+    agg: "avg",
+    yLabel: "weight (lb)",
+  },
+  {
+    containerId: "resting-hr-chart",
+    file: "resting_heart_rate.parquet",
+    valueExpr: "CAST(value AS DOUBLE)",
+    agg: "avg",
+    yLabel: "resting HR (bpm)",
+  },
+  {
+    containerId: "vo2-max-chart",
+    file: "vo2_max.parquet",
+    valueExpr: "CAST(value AS DOUBLE)",
+    agg: "avg",
+    yLabel: "VO2 max (mL/min·kg)",
+  },
+];
+
+async function renderBasicAnalytics() {
+  for (const chart of BASIC_ANALYTICS_CHARTS) {
+    const data = await loadMonthlySeries(chart.file, chart.valueExpr, chart.agg, chart.dateExpr);
+    renderMonthlySeries(chart.containerId, data, chart.yLabel);
+  }
+}
+
 async function loadSummary(): Promise<string> {
   await registerParquet("workouts.parquet");
   const [row] = await query<{
@@ -84,12 +200,11 @@ async function loadSummary(): Promise<string> {
 async function main() {
   const summaryEl = document.querySelector<HTMLParagraphElement>("#summary")!;
   try {
-    const [summary, paceByZone] = await Promise.all([
-      loadSummary(),
-      loadPaceByZone(),
-    ]);
+    const summary = await loadSummary();
     summaryEl.textContent = summary;
+    const paceByZone = await loadPaceByZone();
     renderPaceByZoneChart(paceByZone);
+    await renderBasicAnalytics();
   } catch (err) {
     console.error(err);
     summaryEl.textContent = "Failed to load data — see console.";

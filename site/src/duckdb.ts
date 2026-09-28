@@ -27,17 +27,19 @@ export function getDb(): Promise<duckdb.AsyncDuckDB> {
 
 const registered = new Set<string>();
 
-/** Fetches a Parquet file from /data and registers it under its filename so
- * queries can reference it as e.g. read_parquet('workouts.parquet'). */
+/** Registers a Parquet file under /data by URL (DuckDB fetches/streams it
+ * itself) so queries can reference it as e.g. read_parquet('workouts.parquet').
+ * Buffer-based registration (fetch + registerFileBuffer) corrupted larger
+ * files here ("no magic bytes found"); registerFileURL is the robust path. */
 export async function registerParquet(filename: string): Promise<void> {
   if (registered.has(filename)) return;
   const db = await getDb();
-  const res = await fetch(`/data/${filename}`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch /data/${filename}: ${res.status}`);
-  }
-  const buffer = new Uint8Array(await res.arrayBuffer());
-  await db.registerFileBuffer(filename, buffer);
+  await db.registerFileURL(
+    filename,
+    `${window.location.origin}/data/${filename}`,
+    duckdb.DuckDBDataProtocol.HTTP,
+    false,
+  );
   registered.add(filename);
 }
 
