@@ -1,6 +1,6 @@
 # Pipeline
 
-Turns `export.xml` (+ `workout-routes/*.gpx`, parsed later, on demand, by the site itself) into the Parquet/DuckDB tables under `data/` (gitignored), then precomputes every chart's data into one small `data/site_data.json`. All aggregation happens here, server-side (i.e. at build time, not in the browser) — the site just fetches that JSON and re-buckets its small daily arrays into week/month windows in plain JS. There is no client-side query engine.
+Turns `export.xml` (+ `workout-routes/*.gpx`, read directly from the export folder by `build_site_data.py` for the same-route comparison) into the Parquet/DuckDB tables under `data/` (gitignored), then precomputes every chart's data into one small `data/site_data.json`. All aggregation happens here, server-side (i.e. at build time, not in the browser) — the site just fetches that JSON and re-buckets its small daily arrays into week/month windows in plain JS. There is no client-side query engine.
 
 ## Setup (one time)
 
@@ -16,8 +16,10 @@ pipeline/.venv/bin/python pipeline/parse_export.py --export /path/to/export.xml 
 pipeline/.venv/bin/python pipeline/derive_hr_pace.py --data data
 pipeline/.venv/bin/python pipeline/validate.py --data data
 pipeline/.venv/bin/python pipeline/build_catalog.py --data data
-pipeline/.venv/bin/python pipeline/build_site_data.py --data data
+pipeline/.venv/bin/python pipeline/build_site_data.py --data data --gpx-root /path/to/apple_health_export
 ```
+
+`--gpx-root` is the folder containing `export.xml` and `workout-routes/` (i.e. the same folder passed to `--export`'s parent) — it's optional; omit it to skip the same-route pace comparison.
 
 Re-run all five whenever there's a fresh Apple Health export.
 

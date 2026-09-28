@@ -22,10 +22,12 @@ const ZONE_COLORS: Record<string, string> = {
 type DailyPoint = { date: string; value: number };
 type DailyPaceByZone = { date: string; zone: string; avg_pace: number; n: number };
 type WorkoutEntry = { date: string; type: string; duration_min: number | null };
+type RoutePaceRow = { date: string; route: string; pace_min_per_mi: number; distance_mi: number };
 
 type SiteData = {
   summary: { total_workouts: number; running_workouts: number; first_ts: string; last_ts: string };
   pace_by_zone_daily: DailyPaceByZone[];
+  route_pace: RoutePaceRow[];
   efficiency_factor_daily: DailyPoint[];
   efficiency_factor_steady_daily: DailyPoint[];
   pace_at_ref_hr_daily: DailyPoint[];
@@ -266,6 +268,44 @@ function renderPaceTrendCharts(data: SiteData, range: Range) {
     const series = aggregateTimeSeries(daily, range, "avg");
     renderTimeSeries(chart.containerId, series, chart.yLabel);
   }
+}
+
+// ---- Same-route comparison: every run of a route repeated often enough
+// to trend, plotted on its own line -- not bucketed by range, since each
+// route is already a sparse, all-time series of individual runs. ----
+
+function renderRouteComparison(data: SiteData) {
+  const el = document.querySelector<HTMLDivElement>("#route-pace-chart")!;
+  el.innerHTML = "";
+  if (data.route_pace.length === 0) {
+    el.innerHTML = `<p class="muted">No routes repeated often enough yet.</p>`;
+    return;
+  }
+  const rows = data.route_pace.map((r) => ({ ...r, dateObj: parseLocalDate(r.date) }));
+  const routes = [...new Set(rows.map((r) => r.route))].sort();
+  const plot = Plot.plot({
+    width: Math.min(880, document.body.clientWidth - 48),
+    height: 320,
+    marginLeft: 60,
+    style: CHART_STYLE,
+    x: { label: null },
+    y: { label: "pace (min/mi)", grid: true },
+    color: { label: "route", domain: routes, legend: true },
+    marks: [
+      Plot.lineY(rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "route", curve: "monotone-x" }),
+      Plot.dot(rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "route", r: 3 }),
+      Plot.tip(
+        rows,
+        Plot.pointer({
+          x: "dateObj",
+          y: "pace_min_per_mi",
+          title: (d: RoutePaceRow & { dateObj: Date }) =>
+            `${fmtTipDate(d.dateObj)}\n${d.route}: ${d.pace_min_per_mi.toFixed(1)} min/mi (${d.distance_mi.toFixed(2)} mi)`,
+        }),
+      ),
+    ],
+  });
+  el.append(plot);
 }
 
 // ---- Trend charts (Activity rings, Steps, Resting HR, VO2 max) ----
@@ -556,6 +596,7 @@ async function main() {
   summaryEl.textContent = formatSummary(data.summary);
   loadAndRenderPaceByZone(data, paceRange);
   renderPaceTrendCharts(data, paceRange);
+  renderRouteComparison(data);
   renderTrendCharts(data, trendRange);
   setupCalendar(data);
 }

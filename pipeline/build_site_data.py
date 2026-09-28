@@ -11,17 +11,21 @@ selectors (Past Month/YTD/1 Year/All Time), which is cheap over a few
 hundred/thousand small rows and needs no query engine.
 
 Usage:
-    pipeline/.venv/bin/python pipeline/build_site_data.py --data data
+    pipeline/.venv/bin/python pipeline/build_site_data.py --data data \
+        --gpx-root ~/Downloads/apple_health_export
 """
 import argparse
 import json
+import math
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 ACTIVITY_TYPE_PREFIX = "HKWorkoutActivityType"
+GPX_NS = {"g": "http://www.topografix.com/GPX/1/1"}
 
 
 def humanize_activity_type(activity_type: str) -> str:
@@ -105,6 +109,100 @@ def to_records(daily: pd.DataFrame) -> list[dict]:
     return [{"date": str(row.date), "value": round(float(row.value), 4)} for row in daily.itertuples()]
 
 
+# Route clustering: two runs are treated as "the same route" if they start
+# within this radius of each other AND cover a similar total distance --
+# checked against full-track bounding boxes for a sample of runs, and both
+# matched almost exactly for genuinely repeated routes, so no need to
+# compare the full GPS shape point-by-point.
+ROUTE_START_RADIUS_MI = 0.2
+ROUTE_DIST_TOLERANCE_MI = 0.75
+ROUTE_DIST_TOLERANCE_PCT = 0.15
+MIN_ROUTE_REPEATS = 7  # below this a "cluster" is just a coincidence, not a route run often enough to trend
+
+
+def _haversine_mi(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 3958.8
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _gpx_start_point(gpx_root: Path, gpx_path: str) -> tuple[float, float] | None:
+    full_path = gpx_root / gpx_path.lstrip("/")
+    if not full_path.exists():
+        return None
+    pts = ET.parse(full_path).getroot().findall(".//g:trkpt", GPX_NS)
+    if not pts:
+        return None
+    return float(pts[0].get("lat")), float(pts[0].get("lon"))
+
+
+def cluster_repeated_routes(running: pd.DataFrame, gpx_root: Path | None) -> list[dict]:
+    """Groups runs that start in the same place and cover the same
+    distance -- almost certainly the same physical route, run again --
+    instead of assuming same distance means same route (checked: some
+    similar-distance runs turned out to start miles apart). Only routes
+    repeated at least MIN_ROUTE_REPEATS times are kept, since a comparison
+    across the "same conditions" only means something with enough repeats
+    to show a trend."""
+    if gpx_root is None:
+        return []
+
+    rows = []
+    for row in running.itertuples():
+        if pd.isna(row.gpx_path) or pd.isna(row.distance_mi):
+            continue
+        start = _gpx_start_point(gpx_root, row.gpx_path)
+        if start is None:
+            continue
+        rows.append({
+            "date": row.start_ts.date(), "distance_mi": row.distance_mi,
+            "duration_min": row.duration_min, "lat": start[0], "lon": start[1],
+        })
+    if not rows:
+        return []
+    runs = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+
+    clusters: list[dict] = []
+    cluster_of = {}
+    for r in runs.itertuples():
+        matched = None
+        for ci, c in enumerate(clusters):
+            close_enough = _haversine_mi(r.lat, r.lon, c["lat"], c["lon"]) <= ROUTE_START_RADIUS_MI
+            same_distance = abs(r.distance_mi - c["dist"]) <= max(ROUTE_DIST_TOLERANCE_MI, ROUTE_DIST_TOLERANCE_PCT * c["dist"])
+            if close_enough and same_distance:
+                matched = ci
+                break
+        if matched is None:
+            clusters.append({"lat": r.lat, "lon": r.lon, "dist": r.distance_mi, "n": 0})
+            matched = len(clusters) - 1
+        c = clusters[matched]
+        c["n"] += 1
+        c["lat"] += (r.lat - c["lat"]) / c["n"]
+        c["lon"] += (r.lon - c["lon"]) / c["n"]
+        c["dist"] += (r.distance_mi - c["dist"]) / c["n"]
+        cluster_of[r.Index] = matched
+    runs["cluster"] = runs.index.map(cluster_of)
+
+    qualifying = [ci for ci, c in enumerate(clusters) if c["n"] >= MIN_ROUTE_REPEATS]
+    qualifying.sort(key=lambda ci: -clusters[ci]["n"])
+    labels = {ci: f"Route {chr(65 + i)} (~{clusters[ci]['dist']:.1f} mi)" for i, ci in enumerate(qualifying)}
+
+    records = []
+    for r in runs.itertuples():
+        if r.cluster not in labels:
+            continue
+        records.append({
+            "date": str(r.date),
+            "route": labels[r.cluster],
+            "pace_min_per_mi": round(r.duration_min / r.distance_mi, 4),
+            "distance_mi": round(r.distance_mi, 3),
+        })
+    return records
+
+
 # Reference heart rate for the "predicted pace at X bpm" chart -- chosen to
 # sit in the middle of the real HR-zone config (Z2, just under the Z2/Z3
 # boundary), a representative "steady aerobic effort" rather than an easy
@@ -151,7 +249,7 @@ def per_run_pace_metrics(hr_pace: pd.DataFrame) -> pd.DataFrame:
     return hr_pace.groupby("workout_id").apply(summarize, include_groups=False).reset_index(drop=True)
 
 
-def build(data_dir: Path, out_path: Path):
+def build(data_dir: Path, out_path: Path, gpx_root: Path | None):
     workouts = pd.read_parquet(data_dir / "workouts.parquet")
     running = workouts[workouts["activity_type"] == "HKWorkoutActivityTypeRunning"]
     summary = {
@@ -181,6 +279,16 @@ def build(data_dir: Path, out_path: Path):
     # together when turned into a daily series (almost always just one). ---
     per_run = per_run_pace_metrics(hr_pace)
     reliable_runs = per_run[per_run["n"] >= MIN_SAMPLES_PER_RUN]
+
+    # --- Same-route comparison: pace on runs that share a start point and
+    # distance (almost certainly the same physical loop, controlling for
+    # terrain/elevation), instead of any zone- or HR-derived metric. ---
+    running_with_distance = running[running["start_ts"] < today_cutoff(running["start_ts"].dt.tz)].copy()
+    stats = pd.read_parquet(data_dir / "workout_statistics.parquet")
+    run_distance = stats[stats["metric_type"] == "HKQuantityTypeIdentifierDistanceWalkingRunning"][["workout_id", "sum"]]
+    run_distance = run_distance.rename(columns={"sum": "distance_mi"})
+    running_with_distance = running_with_distance.merge(run_distance, on="workout_id", how="left")
+    route_pace = cluster_repeated_routes(running_with_distance, gpx_root)
 
     def runs_to_daily(df: pd.DataFrame, value_col: str) -> list[dict]:
         df = df.dropna(subset=[value_col])
@@ -229,6 +337,7 @@ def build(data_dir: Path, out_path: Path):
     site_data = {
         "summary": summary,
         "pace_by_zone_daily": pace_by_zone_daily,
+        "route_pace": route_pace,
         "efficiency_factor_daily": efficiency_factor_daily,
         "efficiency_factor_steady_daily": efficiency_factor_steady_daily,
         "pace_at_ref_hr_daily": pace_at_ref_hr_daily,
@@ -252,9 +361,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--data", default=Path("data"), type=Path)
     ap.add_argument("--out", default=None, type=Path, help="Output path (default: <data>/site_data.json)")
+    ap.add_argument(
+        "--gpx-root", default=None, type=Path,
+        help="Directory containing workout-routes/*.gpx (the export.xml folder). "
+             "Omit to skip the same-route pace comparison.",
+    )
     args = ap.parse_args()
     out_path = args.out or (args.data / "site_data.json")
-    build(args.data, out_path)
+    build(args.data, out_path, args.gpx_root)
 
 
 if __name__ == "__main__":
