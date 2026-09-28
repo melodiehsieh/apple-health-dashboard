@@ -1,11 +1,10 @@
 {
-  "_comment": "PLACEHOLDER — replace max_hr and the zone boundaries below with your real Apple-configured Heart Rate Zones (Health app > Browse > Heart > Heart Rate Zones, or Fitness app settings) before trusting zone-tagged output. These defaults are just the common %-of-max-HR formula so the pipeline runs end-to-end in the meantime.",
-  "max_hr": 190,
+  "_comment": "Real Apple-configured Heart Rate Zones (supplied by the user, 2026-09-28). Stated as integer bpm bands (e.g. Z1 <140, Z2 141-153); boundaries below are set at the midpoint between adjacent integer bands (e.g. 140.5 between Z1/Z2) so fractional bpm values from resampling still land in the intended integer band.",
   "zones": [
-    {"name": "Z1", "min_bpm": 0,   "max_bpm": 114},
-    {"name": "Z2", "min_bpm": 114, "max_bpm": 133},
-    {"name": "Z3", "min_bpm": 133, "max_bpm": 152},
-    {"name": "Z4", "min_bpm": 152, "max_bpm": 171},
-    {"name": "Z5", "min_bpm": 171, "max_bpm": 999}
+    {"name": "Z1", "min_bpm": 0,     "max_bpm": 140.5},
+    {"name": "Z2", "min_bpm": 140.5, "max_bpm": 153.5},
+    {"name": "Z3", "min_bpm": 153.5, "max_bpm": 166.5},
+    {"name": "Z4", "min_bpm": 166.5, "max_bpm": 178.5},
+    {"name": "Z5", "min_bpm": 178.5, "max_bpm": 999}
   ]
 }
