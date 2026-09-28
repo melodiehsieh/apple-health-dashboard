@@ -28,6 +28,7 @@ type SiteData = {
   summary: { total_workouts: number; running_workouts: number; first_ts: string; last_ts: string };
   pace_by_zone_daily: DailyPaceByZone[];
   route_pace: RoutePaceRow[];
+  running_miles_daily: { date: string; distance_mi: number }[];
   efficiency_factor_daily: DailyPoint[];
   efficiency_factor_steady_daily: DailyPoint[];
   pace_at_ref_hr_daily: DailyPoint[];
@@ -308,12 +309,59 @@ function renderRouteComparison(data: SiteData) {
   el.append(plot);
 }
 
+// ---- Run frequency/volume: bar charts of run count and total mileage
+// per period. Past Month buckets by week (not day, like every other
+// chart's Past Month view) since a single day's bar is either "1 run" or
+// empty and isn't useful at that granularity. ----
+
+function runsChartBucket(range: Range): Bucket {
+  return range === "month" ? "week" : RANGE_CONFIG[range].bucket;
+}
+
+function renderBarChart(containerId: string, series: TimeSeriesPoint[], yLabel: string, bucket: Bucket, fmt: (v: number) => string) {
+  const el = document.querySelector<HTMLDivElement>(`#${containerId}`)!;
+  el.innerHTML = "";
+  if (series.length === 0) {
+    el.innerHTML = `<p class="muted">No data in this range.</p>`;
+    return;
+  }
+  const plot = Plot.plot({
+    width: Math.min(880, document.body.clientWidth - 48),
+    height: 220,
+    marginLeft: 60,
+    style: CHART_STYLE,
+    x: { label: null, interval: bucket === "month" ? "month" : "week" },
+    y: { label: yLabel, grid: true },
+    marks: [
+      Plot.barY(series, { x: "period", y: "value", fill: "#3E7C7B" }),
+      Plot.tip(
+        series,
+        Plot.pointer({
+          x: "period",
+          y: "value",
+          title: (d: TimeSeriesPoint) => `${formatPeriod(d.period, bucket)}\n${yLabel}: ${fmt(d.value)}`,
+        }),
+      ),
+    ],
+  });
+  el.append(plot);
+}
+
+function renderRunsVolumeCharts(data: SiteData, range: Range) {
+  const bucket = runsChartBucket(range);
+  const runsAsDaily: DailyPoint[] = data.running_miles_daily.map((r) => ({ date: r.date, value: 1 }));
+  const milesAsDaily: DailyPoint[] = data.running_miles_daily.map((r) => ({ date: r.date, value: r.distance_mi }));
+  renderBarChart("runs-count-chart", aggregateTimeSeries(runsAsDaily, range, "sum", bucket), "runs", bucket, (v) => Math.round(v).toString());
+  renderBarChart("runs-miles-chart", aggregateTimeSeries(milesAsDaily, range, "sum", bucket), "miles", bucket, (v) => v.toFixed(1));
+}
+
 // ---- Trend charts (Activity rings, Steps, Resting HR, VO2 max) ----
 
 type TimeSeriesPoint = { period: Date; value: number };
 
-function aggregateTimeSeries(daily: DailyPoint[], range: Range, agg: "avg" | "sum"): TimeSeriesPoint[] {
-  const { bucket, since } = RANGE_CONFIG[range];
+function aggregateTimeSeries(daily: DailyPoint[], range: Range, agg: "avg" | "sum", bucketOverride?: Bucket): TimeSeriesPoint[] {
+  const { bucket: rangeBucket, since } = RANGE_CONFIG[range];
+  const bucket = bucketOverride ?? rangeBucket;
   const sinceDate = since();
   const sums = new Map<string, { period: Date; sum: number; count: number }>();
   for (const row of daily) {
@@ -574,6 +622,7 @@ async function main() {
     if (siteData) {
       loadAndRenderPaceByZone(siteData, paceRange);
       renderPaceTrendCharts(siteData, paceRange);
+      renderRunsVolumeCharts(siteData, paceRange);
     }
   });
   trendRange = setupRangeSelector("trend-range-selector", (range) => {
@@ -597,6 +646,7 @@ async function main() {
   loadAndRenderPaceByZone(data, paceRange);
   renderPaceTrendCharts(data, paceRange);
   renderRouteComparison(data);
+  renderRunsVolumeCharts(data, paceRange);
   renderTrendCharts(data, trendRange);
   setupCalendar(data);
 }

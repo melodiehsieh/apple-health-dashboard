@@ -290,6 +290,15 @@ def build(data_dir: Path, out_path: Path, gpx_root: Path | None):
     running_with_distance = running_with_distance.merge(run_distance, on="workout_id", how="left")
     route_pace = cluster_repeated_routes(running_with_distance, gpx_root)
 
+    # --- Run frequency/volume: one row per run, so the site can bucket
+    # into weeks/months and derive both "number of runs" (count) and
+    # "miles run" (sum) from the same list. ---
+    running_miles = running_with_distance.dropna(subset=["distance_mi"])
+    running_miles_daily = [
+        {"date": r.start_ts.strftime("%Y-%m-%d"), "distance_mi": round(float(r.distance_mi), 3)}
+        for r in running_miles.itertuples()
+    ]
+
     def runs_to_daily(df: pd.DataFrame, value_col: str) -> list[dict]:
         df = df.dropna(subset=[value_col])
         daily = df.groupby("date")[value_col].mean().reset_index()
@@ -338,6 +347,7 @@ def build(data_dir: Path, out_path: Path, gpx_root: Path | None):
         "summary": summary,
         "pace_by_zone_daily": pace_by_zone_daily,
         "route_pace": route_pace,
+        "running_miles_daily": running_miles_daily,
         "efficiency_factor_daily": efficiency_factor_daily,
         "efficiency_factor_steady_daily": efficiency_factor_steady_daily,
         "pace_at_ref_hr_daily": pace_at_ref_hr_daily,
