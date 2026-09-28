@@ -10,6 +10,7 @@
   --accent: #3E7C7B;
   --accent2: #D9A441;
   --on-accent: #FFFFFF;
+  --cell: #F2E9D6;
 }
 
 body {
@@ -250,8 +251,7 @@ section {
 
 .calendar-day {
   aspect-ratio: 1;
-  background: var(--bg);
-  opacity: 0.5;
+  background: var(--cell);
   border: 1px solid var(--hairline);
   border-radius: 2px;
   padding: 3px;
