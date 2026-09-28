@@ -23,6 +23,13 @@ type PaceByZoneRow = {
 let paceByZoneData: PaceByZoneRow[] = [];
 let paceViewMode: "graph" | "table" = "graph";
 
+// A month/zone average from under ~5 minutes of data is noisy enough to
+// mislead (found via a real case: 22 samples/5.5 min of Zone 1 in one
+// month averaged faster than Zone 2-4 purely from small-N noise, distinct
+// from the sensor-dropout and stale-forward-fill issues fixed in the
+// pipeline). 15s buckets -> 20 samples = 5 minutes.
+const MIN_SAMPLES_PER_MONTH_ZONE = 20;
+
 async function loadPaceByZone(): Promise<PaceByZoneRow[]> {
   await registerParquet("workout_hr_pace.parquet");
   const rows = await query<{ month: string; zone: string; avg_pace: number }>(`
@@ -33,6 +40,7 @@ async function loadPaceByZone(): Promise<PaceByZoneRow[]> {
     FROM read_parquet('workout_hr_pace.parquet')
     WHERE zone IS NOT NULL AND pace_min_per_mi IS NOT NULL
     GROUP BY month, zone
+    HAVING count(*) >= ${MIN_SAMPLES_PER_MONTH_ZONE}
     ORDER BY month, zone
   `);
   return rows.map((r) => ({

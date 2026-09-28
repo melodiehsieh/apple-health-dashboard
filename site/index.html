@@ -26,7 +26,10 @@
             moment, so a run's warmup/tempo/cooldown segments each count toward their
             own zone instead of averaging into one misleading number. The first 5
             minutes of each run are excluded, since heart rate lags actual effort
-            at the start and would otherwise register as false Zone 1.
+            at the start and would otherwise register as false Zone 1; likely
+            sensor dropouts and stale readings across data gaps are filtered out;
+            and a month/zone combo with under 5 minutes of data is left out of
+            the trend rather than shown as an unreliable average.
           </p>
           <div id="pace-by-zone-view"></div>
         </section>

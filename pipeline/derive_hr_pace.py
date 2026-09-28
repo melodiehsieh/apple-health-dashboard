@@ -9,10 +9,11 @@ workout's [start_ts, end_ts] window are each resampled onto a fixed-width
 grid using the last known value at/before each grid point (both are
 point-in-time instantaneous readings, not sums), after dropping the first
 `warmup_exclude_minutes` of the run (HR lags actual effort at the start,
-which otherwise shows up as false Zone 1). Zone boundaries and the warmup
-window come from pipeline/zones_config.json -- see that file's comments if
-you haven't replaced the placeholder zone values with your real
-Apple-configured zones yet.
+which otherwise shows up as false Zone 1) and any raw HR samples that look
+like sensor dropouts (see DROPOUT_* constants below). Zone boundaries and
+the warmup window come from pipeline/zones_config.json -- see that file's
+comments if you haven't replaced the placeholder zone values with your
+real Apple-configured zones yet.
 
 Usage:
     pipeline/.venv/bin/python pipeline/derive_hr_pace.py --data data
@@ -25,6 +26,20 @@ import pandas as pd
 
 BUCKET = "15s"
 MPS_TO_MIN_PER_MI = 26.8224  # 60 / 2.23694; min/mi = MPS_TO_MIN_PER_MI / speed_m_s
+
+# HR dropout detection: Apple Watch's optical sensor occasionally reports a
+# brief, implausible dip or spike (often a "cadence lock" artifact, where it
+# locks onto stride/arm-swing cadence instead of pulse) that swings sharply
+# away from and back to the surrounding trend within a couple minutes. A
+# sample that deviates from its local rolling median by more than this many
+# bpm is treated as a sensor artifact and dropped before resampling -- the
+# last known GOOD reading carries forward across it instead.
+DROPOUT_WINDOW_SAMPLES = 61  # wide enough (~5-8 min) that a multi-minute dropout stays a minority of the window
+DROPOUT_THRESHOLD_BPM = 25
+
+# Don't forward-fill a raw HR/speed reading across a gap wider than this --
+# leave the bucket null instead (see resample_last_known).
+MAX_SAMPLE_GAP = pd.Timedelta(seconds=90)
 
 
 def load_config(config_path: Path):
@@ -42,12 +57,32 @@ def assign_zone(hr, zones):
     return None
 
 
-def resample_last_known(df: pd.DataFrame, grid: pd.DatetimeIndex, value_col: str, out_col: str) -> pd.DataFrame:
+def remove_hr_dropouts(hr_df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Drops raw HR samples that deviate sharply from their local rolling
+    median (see DROPOUT_* constants above). Returns (cleaned_df, n_dropped)."""
+    if len(hr_df) < DROPOUT_WINDOW_SAMPLES:
+        return hr_df, 0
+    s = hr_df.sort_values("ts").reset_index(drop=True)
+    rolling_median = s["value"].rolling(DROPOUT_WINDOW_SAMPLES, center=True, min_periods=5).median()
+    deviation = (s["value"] - rolling_median).abs()
+    is_outlier = deviation > DROPOUT_THRESHOLD_BPM
+    return s[~is_outlier], int(is_outlier.sum())
+
+
+def resample_last_known(
+    df: pd.DataFrame, grid: pd.DatetimeIndex, value_col: str, out_col: str, max_gap: pd.Timedelta
+) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame({"ts": grid, out_col: pd.NA})
     df = df.sort_values("ts")
     grid_df = pd.DataFrame({"ts": grid})
-    merged = pd.merge_asof(grid_df, df[["ts", value_col]], on="ts", direction="backward")
+    # `tolerance` leaves a grid point null rather than forward-filling a
+    # stale reading across a real gap in the underlying sensor data (found
+    # via a real case: a ~2.7 min gap in RunningSpeed samples otherwise
+    # forward-filled one fast reading across the whole gap, at a moment
+    # heart rate had genuinely dropped -- almost certainly a pause/stop,
+    # not a sensor glitch, but the stale pace made it look like a fast Z1).
+    merged = pd.merge_asof(grid_df, df[["ts", value_col]], on="ts", direction="backward", tolerance=max_gap)
     merged = merged.rename(columns={value_col: out_col})
     return merged
 
@@ -82,6 +117,7 @@ def derive(data_dir: Path, zones_config: Path):
 
     all_rows = []
     skipped_all_warmup = 0
+    total_dropouts_removed = 0
     for row in running.itertuples():
         start, end = row.start_ts, row.end_ts
         if pd.isna(start) or pd.isna(end) or end <= start:
@@ -97,9 +133,12 @@ def derive(data_dir: Path, zones_config: Path):
         if hr_slice.empty and speed_slice.empty:
             continue
 
+        hr_slice, n_dropped = remove_hr_dropouts(hr_slice)
+        total_dropouts_removed += n_dropped
+
         grid = pd.date_range(start=grid_start, end=end, freq=BUCKET, tz=start.tzinfo)
-        hr_grid = resample_last_known(hr_slice, grid, "value", "heart_rate")
-        speed_grid = resample_last_known(speed_slice, grid, "value", "speed_m_s")
+        hr_grid = resample_last_known(hr_slice, grid, "value", "heart_rate", MAX_SAMPLE_GAP)
+        speed_grid = resample_last_known(speed_slice, grid, "value", "speed_m_s", MAX_SAMPLE_GAP)
 
         out = hr_grid.merge(speed_grid, on="ts", how="outer")
         out["workout_id"] = row.workout_id
@@ -111,6 +150,7 @@ def derive(data_dir: Path, zones_config: Path):
 
     if skipped_all_warmup:
         print(f"{skipped_all_warmup} run(s) shorter than the warmup exclusion window were skipped entirely")
+    print(f"Dropped {total_dropouts_removed} likely HR sensor-dropout sample(s) across all runs")
 
     if not all_rows:
         print("No running workouts with HR/speed data found -- nothing written.")
