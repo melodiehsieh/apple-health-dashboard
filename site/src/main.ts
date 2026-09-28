@@ -149,6 +149,12 @@ function aggregatePaceByZone(daily: DailyPaceByZone[], range: Range): PaceByZone
     .sort((a, b) => a.period.getTime() - b.period.getTime() || a.zone.localeCompare(b.zone));
 }
 
+const CHART_STYLE = {
+  fontFamily: '"DM Mono", monospace',
+  fontSize: "10px",
+  color: "#7A6F5C",
+};
+
 function renderPaceByZoneChart(data: PaceByZoneRow[]) {
   const el = document.querySelector<HTMLDivElement>("#pace-by-zone-view")!;
   el.innerHTML = "";
@@ -160,6 +166,7 @@ function renderPaceByZoneChart(data: PaceByZoneRow[]) {
     width: Math.min(880, document.body.clientWidth - 48),
     height: 420,
     marginLeft: 60,
+    style: CHART_STYLE,
     x: { label: null },
     y: { label: "avg pace (min/mi)", grid: true },
     color: {
@@ -185,7 +192,7 @@ function renderPaceByZoneChart(data: PaceByZoneRow[]) {
 }
 
 function renderPaceByZoneTable(data: PaceByZoneRow[], bucket: Bucket) {
-  const el = document.querySelector<HTMLDivElement>("#pace-by-zone-view")!;
+  const el = document.querySelector<HTMLDivElement>("#pace-by-zone-table")!;
 
   if (data.length === 0) {
     el.innerHTML = `<p class="muted">No data in this range.</p>`;
@@ -225,29 +232,12 @@ function renderPaceByZoneTable(data: PaceByZoneRow[], bucket: Bucket) {
   el.append(table);
 }
 
-let paceViewMode: "graph" | "table" = "graph";
 let paceByZoneData: PaceByZoneRow[] = [];
 let paceBucket: Bucket = RANGE_CONFIG[DEFAULT_RANGE].bucket;
 
 function renderPaceByZone() {
-  if (paceViewMode === "graph") {
-    renderPaceByZoneChart(paceByZoneData);
-  } else {
-    renderPaceByZoneTable(paceByZoneData, paceBucket);
-  }
-}
-
-function setupPaceViewToggle() {
-  const buttons = document.querySelectorAll<HTMLButtonElement>("#pace-view-toggle button");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const mode = btn.dataset.mode as "graph" | "table";
-      if (mode === paceViewMode) return;
-      paceViewMode = mode;
-      buttons.forEach((b) => b.classList.toggle("active", b === btn));
-      renderPaceByZone();
-    });
-  });
+  renderPaceByZoneChart(paceByZoneData);
+  renderPaceByZoneTable(paceByZoneData, paceBucket);
 }
 
 function loadAndRenderPaceByZone(data: SiteData, range: Range) {
@@ -292,6 +282,7 @@ function renderTimeSeries(containerId: string, data: TimeSeriesPoint[], yLabel: 
     width: Math.min(880, document.body.clientWidth - 48),
     height: 220,
     marginLeft: 60,
+    style: CHART_STYLE,
     x: { label: null },
     y: { label: yLabel, grid: true },
     marks: [
@@ -320,7 +311,7 @@ const TREND_CHARTS: Array<{
   { containerId: "active-energy-chart", key: "active_energy_daily", agg: "avg", yLabel: "active energy (cal/day)" },
   { containerId: "exercise-time-chart", key: "exercise_time_daily", agg: "avg", yLabel: "exercise time (min/day)" },
   { containerId: "stand-hours-chart", key: "stand_hours_daily", agg: "avg", yLabel: "stand hours/day" },
-  { containerId: "steps-chart", key: "steps_daily", agg: "sum", yLabel: "total steps" },
+  { containerId: "steps-chart", key: "steps_daily", agg: "avg", yLabel: "steps/day" },
   { containerId: "resting-hr-chart", key: "resting_hr_daily", agg: "avg", yLabel: "resting HR (bpm)" },
   { containerId: "vo2-max-chart", key: "vo2max_daily", agg: "avg", yLabel: "VO2 max (mL/min·kg)" },
 ];
@@ -506,7 +497,6 @@ async function main() {
   const summaryEl = document.querySelector<HTMLParagraphElement>("#summary")!;
 
   setupTabs();
-  setupPaceViewToggle();
   paceRange = setupRangeSelector("pace-range-selector", (range) => {
     paceRange = range;
     if (siteData) loadAndRenderPaceByZone(siteData, paceRange);

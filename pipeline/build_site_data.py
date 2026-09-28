@@ -18,6 +18,7 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ACTIVITY_TYPE_PREFIX = "HKWorkoutActivityType"
@@ -52,6 +53,50 @@ def daily_sum(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
     df = df.dropna(subset=[value_col])
     df = df[df[date_col] < today_cutoff(df[date_col].dt.tz)]
     daily = df.groupby(df[date_col].dt.date)[value_col].sum().reset_index()
+    daily.columns = ["date", "value"]
+    return daily
+
+
+def daily_sum_dedup_sources(df: pd.DataFrame, start_col: str, end_col: str, value_col: str, source_col: str) -> pd.DataFrame:
+    """Steps are logged independently by every source that was worn/carried
+    (iPhone, Watch, third-party apps); when two sources cover the same time
+    window they're almost always counting the same physical steps, so
+    summing every record double- (or triple-) counts on any day more than
+    one source was active -- found via a real case: iPhone + Watch both
+    logging a full day summed to ~2x the Health app's own total. This
+    merges overlapping-time records across sources into clusters and keeps
+    only the single highest-total source per cluster instead of summing
+    across sources; records that don't overlap anything -- including
+    consecutive same-source segments -- are summed normally, since those
+    are legitimately additive time periods."""
+    df = df.dropna(subset=[value_col])
+    df = df[df[start_col] < today_cutoff(df[start_col].dt.tz)]
+    df = df.sort_values(start_col).reset_index(drop=True)
+
+    starts = df[start_col].values
+    ends = df[end_col].values
+    n = len(df)
+    cluster_id = np.empty(n, dtype=np.int64)
+    cur_cluster = 0
+    cur_end = ends[0] if n else None
+    if n:
+        cluster_id[0] = 0
+    for i in range(1, n):
+        if starts[i] <= cur_end:
+            cluster_id[i] = cur_cluster
+            if ends[i] > cur_end:
+                cur_end = ends[i]
+        else:
+            cur_cluster += 1
+            cluster_id[i] = cur_cluster
+            cur_end = ends[i]
+    df["cluster"] = cluster_id
+
+    per_cluster_source = df.groupby(["cluster", source_col])[value_col].sum().reset_index()
+    kept = per_cluster_source.sort_values(value_col, ascending=False).drop_duplicates("cluster")
+    cluster_start = df.groupby("cluster")[start_col].first().rename("cluster_start")
+    kept = kept.merge(cluster_start, on="cluster")
+    daily = kept.groupby(kept["cluster_start"].dt.date)[value_col].sum().reset_index()
     daily.columns = ["date", "value"]
     return daily
 
@@ -94,9 +139,9 @@ def build(data_dir: Path, out_path: Path):
     stand_hours_daily = to_records(daily_mean(activity, "date_ts", "stand_hours"))
 
     # --- Steps, resting HR, VO2 max (raw records -> daily) ---
-    steps = pd.read_parquet(data_dir / "records" / "step_count.parquet", columns=["start_ts", "value"])
+    steps = pd.read_parquet(data_dir / "records" / "step_count.parquet", columns=["start_ts", "end_ts", "value", "source_name"])
     steps["value"] = pd.to_numeric(steps["value"], errors="coerce")
-    steps_daily = to_records(daily_sum(steps, "start_ts", "value"))
+    steps_daily = to_records(daily_sum_dedup_sources(steps, "start_ts", "end_ts", "value", "source_name"))
 
     resting_hr = pd.read_parquet(data_dir / "records" / "resting_heart_rate.parquet", columns=["start_ts", "value"])
     resting_hr["value"] = pd.to_numeric(resting_hr["value"], errors="coerce")

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600;700&display=swap" />
     <title>Melodie's Health Dashboard</title>
   </head>
   <body>
@@ -10,82 +11,92 @@
       <header>
         <h1>Health Dashboard</h1>
         <p id="summary" class="muted">Loading&hellip;</p>
-        <nav id="top-tabs" class="tabs">
-          <button data-tab="running" class="active">Running</button>
-          <button data-tab="health">Health Trends</button>
-          <button data-tab="calendar">Calendar</button>
-        </nav>
       </header>
+      <nav id="top-tabs" class="tabs">
+        <button data-tab="running" class="active">Running</button>
+        <button data-tab="health">Health Trends</button>
+        <button data-tab="calendar">Calendar</button>
+      </nav>
       <main>
         <section data-tab-panel="running">
-          <div class="section-header">
-            <h2>Running pace by heart-rate zone</h2>
-            <div class="toggle-stack">
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h2>Running pace by heart-rate zone</h2>
+                <p class="cardsub">average pace per zone, over time</p>
+              </div>
               <div id="pace-range-selector" class="segmented">
                 <button data-range="month">Past Month</button>
                 <button data-range="ytd" class="active">YTD</button>
                 <button data-range="year">1 Year</button>
                 <button data-range="all">All Time</button>
               </div>
-              <div id="pace-view-toggle" class="segmented">
-                <button data-mode="graph" class="active">Graph</button>
-                <button data-mode="table">Table</button>
-              </div>
             </div>
+            <p class="muted">
+              Average pace at each HR zone, by month &mdash; every 15-second sample from
+              every run is tagged by the zone your heart rate was actually in at that
+              moment, so a run's warmup/tempo/cooldown segments each count toward their
+              own zone instead of averaging into one misleading number. The first 5
+              minutes of each run are excluded, since heart rate lags actual effort
+              at the start and would otherwise register as false Zone 1; likely
+              sensor dropouts and stale readings across data gaps are filtered out;
+              and a month/zone combo with under 5 minutes of data is left out of
+              the trend rather than shown as an unreliable average.
+            </p>
+            <div id="pace-by-zone-view"></div>
+            <h3>Table</h3>
+            <div id="pace-by-zone-table"></div>
           </div>
-          <p class="muted">
-            Average pace at each HR zone, by month &mdash; every 15-second sample from
-            every run is tagged by the zone your heart rate was actually in at that
-            moment, so a run's warmup/tempo/cooldown segments each count toward their
-            own zone instead of averaging into one misleading number. The first 5
-            minutes of each run are excluded, since heart rate lags actual effort
-            at the start and would otherwise register as false Zone 1; likely
-            sensor dropouts and stale readings across data gaps are filtered out;
-            and a month/zone combo with under 5 minutes of data is left out of
-            the trend rather than shown as an unreliable average.
-          </p>
-          <div id="pace-by-zone-view"></div>
         </section>
 
         <section data-tab-panel="health" hidden>
-          <div class="section-header">
-            <h2>Health trends</h2>
-            <div id="trend-range-selector" class="segmented">
-              <button data-range="month">Past Month</button>
-              <button data-range="ytd" class="active">YTD</button>
-              <button data-range="year">1 Year</button>
-              <button data-range="all">All Time</button>
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h2>Health trends</h2>
+                <p class="cardsub">daily activity, steps, and vitals over time</p>
+              </div>
+              <div id="trend-range-selector" class="segmented">
+                <button data-range="month">Past Month</button>
+                <button data-range="ytd" class="active">YTD</button>
+                <button data-range="year">1 Year</button>
+                <button data-range="all">All Time</button>
+              </div>
             </div>
+
+            <h3>Activity rings</h3>
+            <p class="muted">From Apple's daily Activity summary.</p>
+            <div id="active-energy-chart"></div>
+            <div id="exercise-time-chart"></div>
+            <div id="stand-hours-chart"></div>
+
+            <h3>Steps</h3>
+            <div id="steps-chart"></div>
+
+            <h3>Resting heart rate</h3>
+            <div id="resting-hr-chart"></div>
+
+            <h3>VO2 max</h3>
+            <div id="vo2-max-chart"></div>
           </div>
-
-          <h3>Activity rings</h3>
-          <p class="muted">From Apple's daily Activity summary.</p>
-          <div id="active-energy-chart"></div>
-          <div id="exercise-time-chart"></div>
-          <div id="stand-hours-chart"></div>
-
-          <h3>Steps</h3>
-          <div id="steps-chart"></div>
-
-          <h3>Resting heart rate</h3>
-          <div id="resting-hr-chart"></div>
-
-          <h3>VO2 max</h3>
-          <div id="vo2-max-chart"></div>
         </section>
 
         <section data-tab-panel="calendar" hidden>
-          <div class="section-header">
-            <h2>Workout calendar</h2>
-            <div class="segmented">
-              <button id="calendar-prev">&larr;</button>
-              <span id="calendar-month-label" class="calendar-month-label"></span>
-              <button id="calendar-next">&rarr;</button>
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h2>Workout calendar</h2>
+                <p class="cardsub">every workout, one glance per day</p>
+              </div>
+              <div class="calendar-nav">
+                <button id="calendar-prev">&larr;</button>
+                <span id="calendar-month-label" class="calendar-month-label"></span>
+                <button id="calendar-next">&rarr;</button>
+              </div>
             </div>
+            <div id="calendar-grid"></div>
+            <div id="calendar-legend" class="calendar-legend"></div>
           </div>
-          <p class="muted">Every workout, one glance per day.</p>
-          <div id="calendar-grid"></div>
-          <div id="calendar-legend" class="calendar-legend"></div>
         </section>
       </main>
     </div>
