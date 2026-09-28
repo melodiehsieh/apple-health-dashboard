@@ -22,8 +22,8 @@
           <div class="card">
             <div class="section-header">
               <div>
-                <h2>Running pace by heart-rate zone</h2>
-                <p class="cardsub">average pace per zone, over time</p>
+                <h2>Running pace over time</h2>
+                <p class="cardsub">four ways to look at pace vs. effort</p>
               </div>
               <div id="pace-range-selector" class="segmented">
                 <button data-range="month">Past Month</button>
@@ -33,15 +33,51 @@
               </div>
             </div>
             <p class="muted">
-              Average pace at each HR zone, by month &mdash; every 15-second sample from
-              every run is tagged by the zone your heart rate was actually in at that
-              moment, so a run's warmup/tempo/cooldown segments each count toward their
-              own zone instead of averaging into one misleading number. The first 5
-              minutes of each run are excluded, since heart rate lags actual effort
-              at the start and would otherwise register as false Zone 1; likely
-              sensor dropouts and stale readings across data gaps are filtered out;
-              and a month/zone combo with under 5 minutes of data is left out of
-              the trend rather than shown as an unreliable average.
+              Every run here has its first 5 minutes excluded (heart rate lags
+              actual effort at the start) and likely sensor dropouts or stale
+              readings across data gaps filtered out; runs without enough
+              clean data are left out entirely rather than shown as an
+              unreliable average.
+            </p>
+
+            <h3>Efficiency Factor</h3>
+            <p class="muted">
+              Speed &divide; average heart rate per run (&times;100) &mdash; a
+              standard way to trend aerobic fitness that isolates how
+              efficiently you're running at whatever effort a given run
+              happened to be, instead of comparing pace only within
+              whichever zone that effort landed in. Higher is more
+              efficient.
+            </p>
+            <div id="ef-chart"></div>
+
+            <h3>Predicted pace at 150 bpm</h3>
+            <p class="muted">
+              Each run's own pace-vs-heart-rate relationship, read off at a
+              fixed reference heart rate instead of whichever zone a run
+              happened to spend time in. Lower is faster at the same effort.
+              Only shown for runs where heart rate varied enough within the
+              run to fit a trend.
+            </p>
+            <div id="pace-ref-hr-chart"></div>
+
+            <h3>Efficiency Factor &mdash; easy runs only</h3>
+            <p class="muted">
+              The same Efficiency Factor as above, limited to steady/easy
+              runs (almost no time above Zone 3) so interval workouts don't
+              mix hard and easy effort into one trend.
+            </p>
+            <div id="ef-steady-chart"></div>
+
+            <h3>Pace by heart-rate zone</h3>
+            <p class="muted">
+              Average pace at each HR zone, by period &mdash; every
+              15-second sample from every run is tagged by the zone your
+              heart rate was actually in at that moment, so a run's
+              warmup/tempo/cooldown segments each count toward their own
+              zone instead of averaging into one misleading number. A
+              period/zone combination with under 5 minutes of data is left
+              out of the trend rather than shown as an unreliable average.
             </p>
             <div id="pace-by-zone-view"></div>
             <h3>Table</h3>

@@ -105,6 +105,52 @@ def to_records(daily: pd.DataFrame) -> list[dict]:
     return [{"date": str(row.date), "value": round(float(row.value), 4)} for row in daily.itertuples()]
 
 
+# Reference heart rate for the "predicted pace at X bpm" chart -- chosen to
+# sit in the middle of the real HR-zone config (Z2, just under the Z2/Z3
+# boundary), a representative "steady aerobic effort" rather than an easy
+# recovery jog or a hard tempo.
+REFERENCE_HR_BPM = 150.0
+
+# A run is "steady" (not a workout/intervals) if it spends almost no time in
+# the top two zones -- ties directly to the zones the user already reads on
+# the pace-by-zone chart, rather than an opaque HR-variance threshold.
+STEADY_RUN_MAX_HARD_ZONE_FRACTION = 0.20
+
+MIN_SAMPLES_PER_RUN = 20  # 15s buckets -> 20 samples = 5 minutes, matching the zone chart's own floor.
+MIN_HR_RANGE_FOR_REGRESSION = 15.0  # bpm; below this a run's own HR barely moved, so a pace~HR fit is just noise.
+
+
+def per_run_pace_metrics(hr_pace: pd.DataFrame) -> pd.DataFrame:
+    """One row per run: average pace/HR (for an Efficiency Factor -- speed
+    per heartbeat, the standard way coaches trend aerobic fitness without
+    it being skewed by how hard a given week's runs happened to be), plus a
+    per-run linear fit of pace against heart rate so we can read off a
+    single 'predicted pace at a fixed reference HR' instead of comparing
+    pace only within whichever zone a run happened to spend time in."""
+    def summarize(g: pd.DataFrame) -> pd.Series:
+        n = len(g)
+        avg_hr = float(g["heart_rate"].mean())
+        avg_speed_mph = float((60.0 / g["pace_min_per_mi"]).mean())
+        hr_min, hr_max = float(g["heart_rate"].min()), float(g["heart_rate"].max())
+        hard_zone_fraction = float(g["zone"].isin(["Z4", "Z5"]).mean())
+
+        pred_pace_at_ref_hr = None
+        if n >= MIN_SAMPLES_PER_RUN and (hr_max - hr_min) >= MIN_HR_RANGE_FOR_REGRESSION and hr_min <= REFERENCE_HR_BPM <= hr_max:
+            slope, intercept = np.polyfit(g["heart_rate"], g["pace_min_per_mi"], 1)
+            pred_pace_at_ref_hr = float(slope * REFERENCE_HR_BPM + intercept)
+
+        return pd.Series({
+            "date": g["ts"].min().date(),
+            "n": n,
+            "avg_hr": avg_hr,
+            "efficiency_factor": avg_speed_mph / avg_hr * 100,
+            "is_steady": hard_zone_fraction <= STEADY_RUN_MAX_HARD_ZONE_FRACTION,
+            "pred_pace_at_ref_hr": pred_pace_at_ref_hr,
+        })
+
+    return hr_pace.groupby("workout_id").apply(summarize, include_groups=False).reset_index(drop=True)
+
+
 def build(data_dir: Path, out_path: Path):
     workouts = pd.read_parquet(data_dir / "workouts.parquet")
     running = workouts[workouts["activity_type"] == "HKWorkoutActivityTypeRunning"]
@@ -127,6 +173,24 @@ def build(data_dir: Path, out_path: Path):
         {"date": str(r.date), "zone": r.zone, "avg_pace": round(float(r.avg_pace), 4), "n": int(r.n)}
         for r in grouped.itertuples()
     ]
+
+    # --- Per-run pace/HR metrics: Efficiency Factor (all runs and steady
+    # runs only) and predicted pace at a fixed reference HR -- alternatives
+    # to the zone chart that don't fragment when a period's runs didn't
+    # touch every zone. One row per run, so same-day runs are averaged
+    # together when turned into a daily series (almost always just one). ---
+    per_run = per_run_pace_metrics(hr_pace)
+    reliable_runs = per_run[per_run["n"] >= MIN_SAMPLES_PER_RUN]
+
+    def runs_to_daily(df: pd.DataFrame, value_col: str) -> list[dict]:
+        df = df.dropna(subset=[value_col])
+        daily = df.groupby("date")[value_col].mean().reset_index()
+        daily.columns = ["date", "value"]
+        return to_records(daily)
+
+    efficiency_factor_daily = runs_to_daily(reliable_runs, "efficiency_factor")
+    efficiency_factor_steady_daily = runs_to_daily(reliable_runs[reliable_runs["is_steady"]], "efficiency_factor")
+    pace_at_ref_hr_daily = runs_to_daily(per_run, "pred_pace_at_ref_hr")
 
     # --- Activity rings (already one row per day) ---
     activity = pd.read_parquet(data_dir / "activity_summary.parquet")
@@ -165,6 +229,9 @@ def build(data_dir: Path, out_path: Path):
     site_data = {
         "summary": summary,
         "pace_by_zone_daily": pace_by_zone_daily,
+        "efficiency_factor_daily": efficiency_factor_daily,
+        "efficiency_factor_steady_daily": efficiency_factor_steady_daily,
+        "pace_at_ref_hr_daily": pace_at_ref_hr_daily,
         "active_energy_daily": active_energy_daily,
         "exercise_time_daily": exercise_time_daily,
         "stand_hours_daily": stand_hours_daily,

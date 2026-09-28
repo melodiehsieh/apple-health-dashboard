@@ -26,6 +26,9 @@ type WorkoutEntry = { date: string; type: string; duration_min: number | null };
 type SiteData = {
   summary: { total_workouts: number; running_workouts: number; first_ts: string; last_ts: string };
   pace_by_zone_daily: DailyPaceByZone[];
+  efficiency_factor_daily: DailyPoint[];
+  efficiency_factor_steady_daily: DailyPoint[];
+  pace_at_ref_hr_daily: DailyPoint[];
   active_energy_daily: DailyPoint[];
   exercise_time_daily: DailyPoint[];
   stand_hours_daily: DailyPoint[];
@@ -244,6 +247,25 @@ function loadAndRenderPaceByZone(data: SiteData, range: Range) {
   paceBucket = RANGE_CONFIG[range].bucket;
   paceByZoneData = aggregatePaceByZone(data.pace_by_zone_daily, range);
   renderPaceByZone();
+}
+
+// ---- Alternatives to the zone chart: per-run metrics that don't
+// fragment when a period's runs didn't happen to touch every zone. ----
+
+const REFERENCE_HR_BPM = 150;
+
+const PACE_TREND_CHARTS: Array<{ containerId: string; key: keyof SiteData; yLabel: string }> = [
+  { containerId: "ef-chart", key: "efficiency_factor_daily", yLabel: "efficiency factor (speed ÷ HR ×100)" },
+  { containerId: "pace-ref-hr-chart", key: "pace_at_ref_hr_daily", yLabel: `predicted pace at ${REFERENCE_HR_BPM} bpm (min/mi)` },
+  { containerId: "ef-steady-chart", key: "efficiency_factor_steady_daily", yLabel: "efficiency factor, easy runs only (speed ÷ HR ×100)" },
+];
+
+function renderPaceTrendCharts(data: SiteData, range: Range) {
+  for (const chart of PACE_TREND_CHARTS) {
+    const daily = data[chart.key] as DailyPoint[];
+    const series = aggregateTimeSeries(daily, range, "avg");
+    renderTimeSeries(chart.containerId, series, chart.yLabel);
+  }
 }
 
 // ---- Trend charts (Activity rings, Steps, Resting HR, VO2 max) ----
@@ -509,7 +531,10 @@ async function main() {
   setupTabs();
   paceRange = setupRangeSelector("pace-range-selector", (range) => {
     paceRange = range;
-    if (siteData) loadAndRenderPaceByZone(siteData, paceRange);
+    if (siteData) {
+      loadAndRenderPaceByZone(siteData, paceRange);
+      renderPaceTrendCharts(siteData, paceRange);
+    }
   });
   trendRange = setupRangeSelector("trend-range-selector", (range) => {
     trendRange = range;
@@ -530,6 +555,7 @@ async function main() {
 
   summaryEl.textContent = formatSummary(data.summary);
   loadAndRenderPaceByZone(data, paceRange);
+  renderPaceTrendCharts(data, paceRange);
   renderTrendCharts(data, trendRange);
   setupCalendar(data);
 }
