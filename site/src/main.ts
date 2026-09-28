@@ -39,6 +39,14 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);
 }
 
+function fmtTipDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtTipValue(v: number): string {
+  return v >= 1000 ? Math.round(v).toLocaleString("en-US") : v.toFixed(1);
+}
+
 // ---- Shared range selector (Past Month / YTD / 1 Year / All Time) ----
 // Mirrors Apple's own range picker; granularity adapts per range so a
 // short range isn't one flat bucket and a long range isn't thousands of
@@ -163,6 +171,14 @@ function renderPaceByZoneChart(data: PaceByZoneRow[]) {
     marks: [
       Plot.lineY(data, { x: "period", y: "avg_pace", stroke: "zone", curve: "monotone-x" }),
       Plot.dot(data, { x: "period", y: "avg_pace", stroke: "zone", r: 2.5 }),
+      Plot.tip(
+        data,
+        Plot.pointer({
+          x: "period",
+          y: "avg_pace",
+          title: (d: PaceByZoneRow) => `${fmtTipDate(d.period)}\n${d.zone}: ${d.avg_pace.toFixed(1)} min/mi`,
+        }),
+      ),
     ],
   });
   el.append(plot);
@@ -281,6 +297,14 @@ function renderTimeSeries(containerId: string, data: TimeSeriesPoint[], yLabel: 
     marks: [
       Plot.lineY(data, { x: "period", y: "value", curve: "monotone-x" }),
       Plot.dot(data, { x: "period", y: "value", r: 2.5 }),
+      Plot.tip(
+        data,
+        Plot.pointerX({
+          x: "period",
+          y: "value",
+          title: (d: TimeSeriesPoint) => `${fmtTipDate(d.period)}\n${yLabel}: ${fmtTipValue(d.value)}`,
+        }),
+      ),
     ],
   });
   el.innerHTML = "";
@@ -380,13 +404,63 @@ function renderCalendar() {
     const dots = dayWorkouts
       .map((w) => {
         const color = typeColors.get(w.type) ?? "#999";
-        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
-        return `<span class="calendar-workout-dot" style="background:${color}" title="${w.type}${duration}"></span>`;
+        return `<span class="calendar-workout-dot" style="background:${color}"></span>`;
       })
       .join("");
-    html += `<div class="calendar-day"><span class="calendar-day-number">${day}</span>${dots}</div>`;
+    html += `<div class="calendar-day" data-date="${dateStr}"><span class="calendar-day-number">${day}</span>${dots}</div>`;
   }
   grid.innerHTML = html;
+}
+
+function getOrCreateTooltipEl(): HTMLDivElement {
+  let el = document.querySelector<HTMLDivElement>("#calendar-tooltip");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "calendar-tooltip";
+    el.className = "hover-tooltip";
+    document.body.append(el);
+  }
+  return el;
+}
+
+function setupCalendarTooltip() {
+  const grid = document.querySelector<HTMLDivElement>("#calendar-grid")!;
+  const tooltip = getOrCreateTooltipEl();
+
+  const hide = () => {
+    tooltip.style.display = "none";
+  };
+
+  grid.addEventListener("mousemove", (e) => {
+    const cell = (e.target as HTMLElement).closest<HTMLElement>(".calendar-day[data-date]");
+    const dateStr = cell?.dataset.date;
+    const dayWorkouts = dateStr ? workoutsByDate.get(dateStr) : undefined;
+    if (!cell || !dateStr || !dayWorkouts || dayWorkouts.length === 0) {
+      hide();
+      return;
+    }
+    const dateLabel = parseLocalDate(dateStr).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const rows = dayWorkouts
+      .map((w) => {
+        const color = typeColors.get(w.type) ?? "#999";
+        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
+        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${color}"></span>${w.type}${duration}</div>`;
+      })
+      .join("");
+    tooltip.innerHTML = `<div class="hover-tooltip-title">${dateLabel}</div>${rows}`;
+    tooltip.style.display = "block";
+    // Flip to the cursor's other side rather than run off the viewport.
+    const { offsetWidth: w, offsetHeight: h } = tooltip;
+    const left = e.clientX + 14 + w > window.innerWidth ? e.clientX - 14 - w : e.clientX + 14;
+    const top = e.clientY + 14 + h > window.innerHeight ? e.clientY - 14 - h : e.clientY + 14;
+    tooltip.style.left = `${Math.max(4, left)}px`;
+    tooltip.style.top = `${Math.max(4, top)}px`;
+  });
+  grid.addEventListener("mouseleave", hide);
 }
 
 function setupCalendar(data: SiteData) {
@@ -416,6 +490,7 @@ function setupCalendar(data: SiteData) {
 
   renderCalendarLegend();
   renderCalendar();
+  setupCalendarTooltip();
 }
 
 function formatSummary(s: SiteData["summary"]): string {

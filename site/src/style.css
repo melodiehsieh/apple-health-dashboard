@@ -219,3 +219,41 @@ section {
   height: 10px;
   border-radius: 3px;
 }
+
+.calendar-day[data-date] {
+  cursor: default;
+}
+
+.hover-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  background: #2c2c2e;
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  max-width: 220px;
+}
+
+.hover-tooltip-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.hover-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hover-tooltip-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
