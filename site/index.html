@@ -10,9 +10,14 @@
       <header>
         <h1>Health Dashboard</h1>
         <p id="summary" class="muted">Loading&hellip;</p>
+        <nav id="top-tabs" class="tabs">
+          <button data-tab="running" class="active">Running</button>
+          <button data-tab="health">Health Trends</button>
+          <button data-tab="calendar">Calendar</button>
+        </nav>
       </header>
       <main>
-        <section>
+        <section data-tab-panel="running">
           <div class="section-header">
             <h2>Running pace by heart-rate zone</h2>
             <div class="toggle-stack">
@@ -42,7 +47,7 @@
           <div id="pace-by-zone-view"></div>
         </section>
 
-        <section>
+        <section data-tab-panel="health" hidden>
           <div class="section-header">
             <h2>Health trends</h2>
             <div id="trend-range-selector" class="segmented">
@@ -67,6 +72,20 @@
 
           <h3>VO2 max</h3>
           <div id="vo2-max-chart"></div>
+        </section>
+
+        <section data-tab-panel="calendar" hidden>
+          <div class="section-header">
+            <h2>Workout calendar</h2>
+            <div class="segmented">
+              <button id="calendar-prev">&larr;</button>
+              <span id="calendar-month-label" class="calendar-month-label"></span>
+              <button id="calendar-next">&rarr;</button>
+            </div>
+          </div>
+          <p class="muted">Every workout, one glance per day.</p>
+          <div id="calendar-grid"></div>
+          <div id="calendar-legend" class="calendar-legend"></div>
         </section>
       </main>
     </div>

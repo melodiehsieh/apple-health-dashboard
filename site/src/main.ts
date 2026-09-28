@@ -21,6 +21,7 @@ const ZONE_COLORS: Record<string, string> = {
 
 type DailyPoint = { date: string; value: number };
 type DailyPaceByZone = { date: string; zone: string; avg_pace: number; n: number };
+type WorkoutEntry = { date: string; type: string; duration_min: number | null };
 
 type SiteData = {
   summary: { total_workouts: number; running_workouts: number; first_ts: string; last_ts: string };
@@ -31,6 +32,7 @@ type SiteData = {
   steps_daily: DailyPoint[];
   resting_hr_daily: DailyPoint[];
   vo2max_daily: DailyPoint[];
+  workouts: WorkoutEntry[];
 };
 
 function parseLocalDate(dateStr: string): Date {
@@ -307,6 +309,115 @@ function renderTrendCharts(data: SiteData, range: Range) {
   }
 }
 
+// ---- Top-level tabs ----
+
+function setupTabs() {
+  const buttons = document.querySelectorAll<HTMLButtonElement>("#top-tabs button");
+  const panels = document.querySelectorAll<HTMLElement>("[data-tab-panel]");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      buttons.forEach((b) => b.classList.toggle("active", b === btn));
+      panels.forEach((p) => {
+        p.hidden = p.dataset.tabPanel !== tab;
+      });
+    });
+  });
+}
+
+// ---- Workout calendar ----
+
+// A qualitative palette distinct from the HR zone colors, assigned by
+// overall frequency (most common workout types first) so the everyday
+// ones (Walking, Running, Strength Training) stay maximally distinct;
+// rare types share less-distinct hues, which is fine since they're rare.
+const CALENDAR_PALETTE = [
+  "#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948",
+  "#B07AA1", "#FF9DA7", "#9C755F", "#BAB0AC", "#86BCB6", "#D37295",
+  "#B6992D", "#499894", "#F1CE63", "#79706E", "#D4A6C8", "#FABFD2", "#8CD17D",
+];
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+let calendarMonth = new Date();
+let typeColors = new Map<string, string>();
+let workoutsByDate = new Map<string, WorkoutEntry[]>();
+
+function buildTypeColors(workouts: WorkoutEntry[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const w of workouts) counts.set(w.type, (counts.get(w.type) ?? 0) + 1);
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type]) => type);
+  const map = new Map<string, string>();
+  sorted.forEach((type, i) => map.set(type, CALENDAR_PALETTE[i % CALENDAR_PALETTE.length]));
+  return map;
+}
+
+function renderCalendarLegend() {
+  const el = document.querySelector<HTMLDivElement>("#calendar-legend")!;
+  el.innerHTML = [...typeColors.entries()]
+    .map(
+      ([type, color]) =>
+        `<div class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:${color}"></span>${type}</div>`,
+    )
+    .join("");
+}
+
+function renderCalendar() {
+  const grid = document.querySelector<HTMLDivElement>("#calendar-grid")!;
+  const label = document.querySelector<HTMLSpanElement>("#calendar-month-label")!;
+  label.textContent = calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let html = DAY_NAMES.map((d) => `<div class="calendar-day-name">${d}</div>`).join("");
+  for (let i = 0; i < firstDayOfWeek; i++) html += `<div class="calendar-day empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dayWorkouts = workoutsByDate.get(dateStr) ?? [];
+    const dots = dayWorkouts
+      .map((w) => {
+        const color = typeColors.get(w.type) ?? "#999";
+        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
+        return `<span class="calendar-workout-dot" style="background:${color}" title="${w.type}${duration}"></span>`;
+      })
+      .join("");
+    html += `<div class="calendar-day"><span class="calendar-day-number">${day}</span>${dots}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function setupCalendar(data: SiteData) {
+  typeColors = buildTypeColors(data.workouts);
+  workoutsByDate = new Map();
+  for (const w of data.workouts) {
+    const list = workoutsByDate.get(w.date) ?? [];
+    list.push(w);
+    workoutsByDate.set(w.date, list);
+  }
+
+  const maxDateStr = data.workouts.reduce(
+    (max, w) => (w.date > max ? w.date : max),
+    data.workouts[0]?.date ?? new Date().toISOString().slice(0, 10),
+  );
+  const maxDate = parseLocalDate(maxDateStr);
+  calendarMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+
+  document.querySelector("#calendar-prev")!.addEventListener("click", () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.querySelector("#calendar-next")!.addEventListener("click", () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+    renderCalendar();
+  });
+
+  renderCalendarLegend();
+  renderCalendar();
+}
+
 function formatSummary(s: SiteData["summary"]): string {
   const fmt = (t: string) => new Date(t).toLocaleDateString("en-US", { year: "numeric", month: "short" });
   return `${s.total_workouts} workouts (${s.running_workouts} runs) from ${fmt(s.first_ts)} to ${fmt(s.last_ts)}`;
@@ -319,6 +430,7 @@ let siteData: SiteData | null = null;
 async function main() {
   const summaryEl = document.querySelector<HTMLParagraphElement>("#summary")!;
 
+  setupTabs();
   setupPaceViewToggle();
   paceRange = setupRangeSelector("pace-range-selector", (range) => {
     paceRange = range;
@@ -344,6 +456,7 @@ async function main() {
   summaryEl.textContent = formatSummary(data.summary);
   loadAndRenderPaceByZone(data, paceRange);
   renderTrendCharts(data, trendRange);
+  setupCalendar(data);
 }
 
 main();

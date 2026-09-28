@@ -15,9 +15,19 @@ Usage:
 """
 import argparse
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
+
+ACTIVITY_TYPE_PREFIX = "HKWorkoutActivityType"
+
+
+def humanize_activity_type(activity_type: str) -> str:
+    name = activity_type
+    if name.startswith(ACTIVITY_TYPE_PREFIX):
+        name = name[len(ACTIVITY_TYPE_PREFIX):]
+    return re.sub(r"(?<!^)(?=[A-Z])", " ", name)
 
 
 def today_cutoff(tz) -> pd.Timestamp:
@@ -96,6 +106,17 @@ def build(data_dir: Path, out_path: Path):
     vo2max["value"] = pd.to_numeric(vo2max["value"], errors="coerce")
     vo2max_daily = to_records(daily_mean(vo2max, "start_ts", "value"))
 
+    # --- Calendar: every workout, one row each, for the day-by-day view ---
+    calendar_workouts = workouts[workouts["start_ts"] < today_cutoff(workouts["start_ts"].dt.tz)]
+    workouts_list = [
+        {
+            "date": row.start_ts.strftime("%Y-%m-%d"),
+            "type": humanize_activity_type(row.activity_type),
+            "duration_min": round(float(row.duration_min), 1) if pd.notna(row.duration_min) else None,
+        }
+        for row in calendar_workouts.itertuples()
+    ]
+
     site_data = {
         "summary": summary,
         "pace_by_zone_daily": pace_by_zone_daily,
@@ -105,6 +126,7 @@ def build(data_dir: Path, out_path: Path):
         "steps_daily": steps_daily,
         "resting_hr_daily": resting_hr_daily,
         "vo2max_daily": vo2max_daily,
+        "workouts": workouts_list,
     }
 
     out_path.write_text(json.dumps(site_data, separators=(",", ":")))
