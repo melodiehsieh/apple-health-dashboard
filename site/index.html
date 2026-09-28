@@ -24,7 +24,9 @@
             Average pace at each HR zone, by month &mdash; every 15-second sample from
             every run is tagged by the zone your heart rate was actually in at that
             moment, so a run's warmup/tempo/cooldown segments each count toward their
-            own zone instead of averaging into one misleading number.
+            own zone instead of averaging into one misleading number. The first 5
+            minutes of each run are excluded, since heart rate lags actual effort
+            at the start and would otherwise register as false Zone 1.
           </p>
           <div id="pace-by-zone-view"></div>
         </section>

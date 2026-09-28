@@ -7,9 +7,12 @@ trends can be plotted across runs, independent of any whole-run label.
 For each Running workout, HeartRate and RunningSpeed records inside that
 workout's [start_ts, end_ts] window are each resampled onto a fixed-width
 grid using the last known value at/before each grid point (both are
-point-in-time instantaneous readings, not sums). Zone boundaries come from
-pipeline/zones_config.json -- see that file's `_comment` if you haven't
-replaced the placeholder values with your real Apple-configured zones yet.
+point-in-time instantaneous readings, not sums), after dropping the first
+`warmup_exclude_minutes` of the run (HR lags actual effort at the start,
+which otherwise shows up as false Zone 1). Zone boundaries and the warmup
+window come from pipeline/zones_config.json -- see that file's comments if
+you haven't replaced the placeholder zone values with your real
+Apple-configured zones yet.
 
 Usage:
     pipeline/.venv/bin/python pipeline/derive_hr_pace.py --data data
@@ -24,10 +27,10 @@ BUCKET = "15s"
 MPS_TO_MIN_PER_MI = 26.8224  # 60 / 2.23694; min/mi = MPS_TO_MIN_PER_MI / speed_m_s
 
 
-def load_zones(config_path: Path):
+def load_config(config_path: Path):
     with open(config_path) as f:
         cfg = json.load(f)
-    return cfg["zones"]
+    return cfg["zones"], cfg.get("warmup_exclude_minutes", 0)
 
 
 def assign_zone(hr, zones):
@@ -73,12 +76,20 @@ def derive(data_dir: Path, zones_config: Path):
     )
     # `value` is now always m/s regardless of the source unit.
 
-    zones = load_zones(zones_config)
+    zones, warmup_exclude_minutes = load_config(zones_config)
+    warmup_delta = pd.Timedelta(minutes=warmup_exclude_minutes)
+    print(f"Excluding the first {warmup_exclude_minutes} minute(s) of each run (HR warmup lag)")
 
     all_rows = []
+    skipped_all_warmup = 0
     for row in running.itertuples():
         start, end = row.start_ts, row.end_ts
         if pd.isna(start) or pd.isna(end) or end <= start:
+            continue
+
+        grid_start = start + warmup_delta
+        if grid_start >= end:
+            skipped_all_warmup += 1
             continue
 
         hr_slice = hr[(hr["ts"] >= start) & (hr["ts"] <= end)]
@@ -86,7 +97,7 @@ def derive(data_dir: Path, zones_config: Path):
         if hr_slice.empty and speed_slice.empty:
             continue
 
-        grid = pd.date_range(start=start, end=end, freq=BUCKET, tz=start.tzinfo)
+        grid = pd.date_range(start=grid_start, end=end, freq=BUCKET, tz=start.tzinfo)
         hr_grid = resample_last_known(hr_slice, grid, "value", "heart_rate")
         speed_grid = resample_last_known(speed_slice, grid, "value", "speed_m_s")
 
@@ -97,6 +108,9 @@ def derive(data_dir: Path, zones_config: Path):
         )
         out["zone"] = out["heart_rate"].apply(lambda hr_val: assign_zone(hr_val, zones))
         all_rows.append(out[["workout_id", "ts", "heart_rate", "pace_min_per_mi", "zone"]])
+
+    if skipped_all_warmup:
+        print(f"{skipped_all_warmup} run(s) shorter than the warmup exclusion window were skipped entirely")
 
     if not all_rows:
         print("No running workouts with HR/speed data found -- nothing written.")

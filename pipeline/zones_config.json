@@ -1,5 +1,7 @@
 {
   "_comment": "Real Apple-configured Heart Rate Zones (supplied by the user, 2026-09-28). Stated as integer bpm bands (e.g. Z1 <140, Z2 141-153); boundaries below are set at the midpoint between adjacent integer bands (e.g. 140.5 between Z1/Z2) so fractional bpm values from resampling still land in the intended integer band.",
+  "_warmup_comment": "warmup_exclude_minutes drops samples from the first N minutes of each run before zone-tagging/aggregation, since HR lags actual effort at the start of a run and otherwise shows up as false Zone 1. Chosen from this export's own data (2026-09-28): Z1 share of samples was 35.6% at minute 0, ~12-14% through minutes 2-9, settling to ~5-8% by minute 10+ -- 5 falls after the sharpest drop and matches typical HR-lag/warmup duration. Raise it if zone trends still look warmup-skewed; lower it if real easy-effort minutes are getting cut.",
+  "warmup_exclude_minutes": 5,
   "zones": [
     {"name": "Z1", "min_bpm": 0,     "max_bpm": 140.5},
     {"name": "Z2", "min_bpm": 140.5, "max_bpm": 153.5},
