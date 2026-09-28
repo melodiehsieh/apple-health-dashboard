@@ -272,16 +272,28 @@ section {
 }
 
 .calendar-chip {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   font-family: "DM Mono", monospace;
   font-size: 0.6rem;
   color: #fff;
   border-radius: 3px;
   padding: 1px 4px;
   line-height: 1.5;
+}
+
+.calendar-chip-label {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.calendar-chip-metric {
+  flex: 0 0 auto;
+  opacity: 0.85;
 }
 
 .heatmap-scroll {

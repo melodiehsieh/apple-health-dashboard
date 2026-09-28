@@ -526,7 +526,10 @@ function renderCalendar() {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayWorkouts = [...(workoutsByDate.get(dateStr) ?? [])].sort((a, b) => (b.duration_min ?? 0) - (a.duration_min ?? 0));
     const chips = dayWorkouts
-      .map((w) => `<span class="calendar-chip" style="background:${categoryOf(w.type).color}">${TYPE_ABBR[w.type] ?? w.type} ${workoutMetricLabel(w)}</span>`)
+      .map(
+        (w) =>
+          `<span class="calendar-chip" style="background:${categoryOf(w.type).color}"><span class="calendar-chip-label">${TYPE_ABBR[w.type] ?? w.type}</span><span class="calendar-chip-metric">${workoutMetricLabel(w)}</span></span>`,
+      )
       .join("");
     html += `<div class="calendar-day" data-date="${dateStr}"><span class="calendar-day-number">${day}</span>${chips}</div>`;
   }
