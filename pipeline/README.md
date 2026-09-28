@@ -1,6 +1,6 @@
 # Pipeline
 
-Turns `export.xml` (+ `workout-routes/*.gpx`, parsed later, on demand, by the site itself) into the Parquet/DuckDB tables under `data/` (gitignored).
+Turns `export.xml` (+ `workout-routes/*.gpx`, parsed later, on demand, by the site itself) into the Parquet/DuckDB tables under `data/` (gitignored), then precomputes every chart's data into one small `data/site_data.json`. All aggregation happens here, server-side (i.e. at build time, not in the browser) — the site just fetches that JSON and re-buckets its small daily arrays into week/month windows in plain JS. There is no client-side query engine.
 
 ## Setup (one time)
 
@@ -16,9 +16,10 @@ pipeline/.venv/bin/python pipeline/parse_export.py --export /path/to/export.xml 
 pipeline/.venv/bin/python pipeline/derive_hr_pace.py --data data
 pipeline/.venv/bin/python pipeline/validate.py --data data
 pipeline/.venv/bin/python pipeline/build_catalog.py --data data
+pipeline/.venv/bin/python pipeline/build_site_data.py --data data
 ```
 
-Re-run all four whenever there's a fresh Apple Health export.
+Re-run all five whenever there's a fresh Apple Health export.
 
 ## Before trusting `zone` values
 

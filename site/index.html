@@ -15,9 +15,17 @@
         <section>
           <div class="section-header">
             <h2>Running pace by heart-rate zone</h2>
-            <div id="pace-view-toggle" class="segmented">
-              <button data-mode="graph" class="active">Graph</button>
-              <button data-mode="table">Table</button>
+            <div class="toggle-stack">
+              <div id="pace-range-selector" class="segmented">
+                <button data-range="month">Past Month</button>
+                <button data-range="ytd" class="active">YTD</button>
+                <button data-range="year">1 Year</button>
+                <button data-range="all">All Time</button>
+              </div>
+              <div id="pace-view-toggle" class="segmented">
+                <button data-mode="graph" class="active">Graph</button>
+                <button data-mode="table">Table</button>
+              </div>
             </div>
           </div>
           <p class="muted">
@@ -39,9 +47,9 @@
             <h2>Health trends</h2>
             <div id="trend-range-selector" class="segmented">
               <button data-range="month">Past Month</button>
-              <button data-range="ytd">YTD</button>
+              <button data-range="ytd" class="active">YTD</button>
               <button data-range="year">1 Year</button>
-              <button data-range="all" class="active">All Time</button>
+              <button data-range="all">All Time</button>
             </div>
           </div>
 
