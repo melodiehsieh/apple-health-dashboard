@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Melodie's Health Dashboard</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Health Dashboard</h1>
+        <p id="summary" class="muted">Loading&hellip;</p>
+      </header>
+      <main>
+        <section>
+          <h2>Running pace by heart-rate zone</h2>
+          <p class="muted">
+            Average pace at each HR zone, by month &mdash; every 15-second sample from
+            every run is tagged by the zone your heart rate was actually in at that
+            moment, so a run's warmup/tempo/cooldown segments each count toward their
+            own zone instead of averaging into one misleading number.
+          </p>
+          <div id="pace-by-zone-chart"></div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
