@@ -20,9 +20,19 @@ from pathlib import Path
 import pandas as pd
 
 
+def today_cutoff(tz) -> pd.Timestamp:
+    """Midnight of the current day in `tz`. The day the export was taken is
+    always partial (the export runs at some time of day, not at midnight),
+    so every daily series excludes it entirely rather than showing a
+    misleadingly low final data point -- a real case: an export taken
+    mid-morning made the last day of every "Health trends" chart look like
+    a sharp drop-off, when it was really just an incomplete day."""
+    return pd.Timestamp.now(tz=tz).normalize()
+
+
 def daily_mean(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
     df = df.dropna(subset=[value_col])
-    df = df[df[date_col] <= pd.Timestamp.now(tz=df[date_col].dt.tz)]
+    df = df[df[date_col] < today_cutoff(df[date_col].dt.tz)]
     daily = df.groupby(df[date_col].dt.date)[value_col].mean().reset_index()
     daily.columns = ["date", "value"]
     return daily
@@ -30,7 +40,7 @@ def daily_mean(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
 
 def daily_sum(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
     df = df.dropna(subset=[value_col])
-    df = df[df[date_col] <= pd.Timestamp.now(tz=df[date_col].dt.tz)]
+    df = df[df[date_col] < today_cutoff(df[date_col].dt.tz)]
     daily = df.groupby(df[date_col].dt.date)[value_col].sum().reset_index()
     daily.columns = ["date", "value"]
     return daily
@@ -54,7 +64,7 @@ def build(data_dir: Path, out_path: Path):
     # weight-average correctly when it re-buckets into week/month. ---
     hr_pace = pd.read_parquet(data_dir / "workout_hr_pace.parquet")
     hr_pace = hr_pace[hr_pace["zone"].notna() & hr_pace["pace_min_per_mi"].notna()]
-    hr_pace = hr_pace[hr_pace["ts"] <= pd.Timestamp.now(tz=hr_pace["ts"].dt.tz)]
+    hr_pace = hr_pace[hr_pace["ts"] < today_cutoff(hr_pace["ts"].dt.tz)]
     grouped = hr_pace.groupby([hr_pace["ts"].dt.date, "zone"])["pace_min_per_mi"].agg(["mean", "count"])
     grouped = grouped.reset_index()
     grouped.columns = ["date", "zone", "avg_pace", "n"]
