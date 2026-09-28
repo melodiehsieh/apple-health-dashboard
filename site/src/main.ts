@@ -463,39 +463,42 @@ function setupTabs() {
 
 // ---- Workout calendar ----
 
-// A qualitative palette distinct from the HR zone colors, assigned by
-// overall frequency (most common workout types first) so the everyday
-// ones (Walking, Running, Strength Training) stay maximally distinct;
-// rare types share less-distinct hues, which is fine since they're rare.
-const CALENDAR_PALETTE = [
-  "#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948",
-  "#B07AA1", "#FF9DA7", "#9C755F", "#BAB0AC", "#86BCB6", "#D37295",
-  "#B6992D", "#499894", "#F1CE63", "#79706E", "#D4A6C8", "#FABFD2", "#8CD17D",
+// Broad categories instead of one color per workout type -- with 19
+// distinct types, a full legend was impossible to scan at a glance. Each
+// category gets one color; the chip's own text still names the exact type.
+const CATEGORIES: Array<{ name: string; color: string; types: string[] }> = [
+  { name: "Cardio", color: "#3E7C7B", types: ["Walking", "Running", "Stair Climbing", "Cross Training", "Mixed Cardio", "Jump Rope", "Kickboxing"] },
+  { name: "Strength", color: "#C1442D", types: ["Traditional Strength Training", "Functional Strength Training", "Core Training"] },
+  { name: "Racquet Sports", color: "#D9A441", types: ["Pickleball", "Tennis", "Squash"] },
+  { name: "Mind & Recovery", color: "#8B6FA8", types: ["Yoga", "Pilates", "Cooldown"] },
+  { name: "Outdoor & Other", color: "#5C8158", types: ["Hiking", "Snowboarding", "Climbing"] },
 ];
+const DEFAULT_CATEGORY = CATEGORIES[0];
+const typeToCategory = new Map<string, (typeof CATEGORIES)[number]>();
+CATEGORIES.forEach((c) => c.types.forEach((t) => typeToCategory.set(t, c)));
+function categoryOf(type: string) {
+  return typeToCategory.get(type) ?? DEFAULT_CATEGORY;
+}
+
+// Short chip labels so a busy day's full workout list still fits.
+const TYPE_ABBR: Record<string, string> = {
+  Walking: "Walk", Running: "Run", "Traditional Strength Training": "Strength",
+  "Functional Strength Training": "Strength", "Stair Climbing": "Stairs", Pickleball: "Pickleball",
+  Yoga: "Yoga", Kickboxing: "Kickbox", "Cross Training": "Cross-tr", Tennis: "Tennis",
+  Cooldown: "Cooldown", "Core Training": "Core", Snowboarding: "Snowboard", "Mixed Cardio": "Mix cardio",
+  Hiking: "Hike", "Jump Rope": "Jump rope", Squash: "Squash", Climbing: "Climb", Pilates: "Pilates",
+};
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 let calendarMonth = new Date();
-let typeColors = new Map<string, string>();
 let workoutsByDate = new Map<string, WorkoutEntry[]>();
-
-function buildTypeColors(workouts: WorkoutEntry[]): Map<string, string> {
-  const counts = new Map<string, number>();
-  for (const w of workouts) counts.set(w.type, (counts.get(w.type) ?? 0) + 1);
-  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([type]) => type);
-  const map = new Map<string, string>();
-  sorted.forEach((type, i) => map.set(type, CALENDAR_PALETTE[i % CALENDAR_PALETTE.length]));
-  return map;
-}
 
 function renderCalendarLegend() {
   const el = document.querySelector<HTMLDivElement>("#calendar-legend")!;
-  el.innerHTML = [...typeColors.entries()]
-    .map(
-      ([type, color]) =>
-        `<div class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:${color}"></span>${type}</div>`,
-    )
-    .join("");
+  el.innerHTML = CATEGORIES.map(
+    (c) => `<div class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:${c.color}"></span>${c.name}</div>`,
+  ).join("");
 }
 
 function renderCalendar() {
@@ -512,14 +515,11 @@ function renderCalendar() {
   for (let i = 0; i < firstDayOfWeek; i++) html += `<div class="calendar-day empty"></div>`;
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const dayWorkouts = workoutsByDate.get(dateStr) ?? [];
-    const dots = dayWorkouts
-      .map((w) => {
-        const color = typeColors.get(w.type) ?? "#999";
-        return `<span class="calendar-workout-dot" style="background:${color}"></span>`;
-      })
+    const dayWorkouts = [...(workoutsByDate.get(dateStr) ?? [])].sort((a, b) => (b.duration_min ?? 0) - (a.duration_min ?? 0));
+    const chips = dayWorkouts
+      .map((w) => `<span class="calendar-chip" style="background:${categoryOf(w.type).color}">${TYPE_ABBR[w.type] ?? w.type}</span>`)
       .join("");
-    html += `<div class="calendar-day" data-date="${dateStr}"><span class="calendar-day-number">${day}</span>${dots}</div>`;
+    html += `<div class="calendar-day" data-date="${dateStr}"><span class="calendar-day-number">${day}</span>${chips}</div>`;
   }
   grid.innerHTML = html;
 }
@@ -558,7 +558,7 @@ function setupCalendarTooltip() {
     });
     const rows = dayWorkouts
       .map((w) => {
-        const color = typeColors.get(w.type) ?? "#999";
+        const color = categoryOf(w.type).color;
         const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
         return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${color}"></span>${w.type}${duration}</div>`;
       })
@@ -575,8 +575,89 @@ function setupCalendarTooltip() {
   grid.addEventListener("mouseleave", hide);
 }
 
+// ---- Workout volume heatmap: trailing 12 months, color = total minutes
+// that day (not type), so a year fits in the space the month grid above
+// uses for four weeks. Complements the calendar rather than replacing it --
+// good for spotting streaks/gaps, with the same hover detail. ----
+
+const HEATMAP_COLOR_STOPS = ["#E9DFC4", "#C9DBC3", "#8FB386", "#5C8158", "#2E4A2A"];
+
+function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
+  const dailyTotal = new Map<string, number>();
+  for (const w of workouts) {
+    dailyTotal.set(w.date, (dailyTotal.get(w.date) ?? 0) + (w.duration_min ?? 0));
+  }
+  const maxMin = Math.max(1, ...dailyTotal.values());
+  function colorFor(mins: number): string {
+    if (!mins) return HEATMAP_COLOR_STOPS[0];
+    const t = Math.min(1, mins / maxMin);
+    const idx = Math.min(HEATMAP_COLOR_STOPS.length - 1, Math.floor(t * (HEATMAP_COLOR_STOPS.length - 1)) + 1);
+    return HEATMAP_COLOR_STOPS[idx];
+  }
+
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const start = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate() + 1);
+  const startAligned = new Date(start);
+  startAligned.setDate(startAligned.getDate() - startAligned.getDay());
+
+  const monthsRow = document.querySelector<HTMLDivElement>("#heatmap-months")!;
+  const grid = document.querySelector<HTMLDivElement>("#heatmap-grid")!;
+  monthsRow.innerHTML = "";
+  grid.innerHTML = "";
+
+  let cur = new Date(startAligned);
+  let lastMonth = -1;
+  while (cur <= end) {
+    if (cur.getDay() === 0) {
+      const label = document.createElement("div");
+      label.className = "heatmap-month-label";
+      if (cur.getMonth() !== lastMonth) {
+        label.textContent = cur.toLocaleDateString("en-US", { month: "short" });
+        lastMonth = cur.getMonth();
+      }
+      monthsRow.appendChild(label);
+    }
+    const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+    const cell = document.createElement("div");
+    cell.className = "heatmap-cell";
+    if (cur >= start && cur <= end) {
+      cell.style.background = colorFor(dailyTotal.get(iso) ?? 0);
+      cell.dataset.date = iso;
+    } else {
+      cell.style.background = "transparent";
+    }
+    grid.appendChild(cell);
+    cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+  }
+
+  const tooltip = getOrCreateTooltipEl();
+  const hide = () => { tooltip.style.display = "none"; };
+  grid.addEventListener("mousemove", (e) => {
+    const cell = (e.target as HTMLElement).closest<HTMLElement>(".heatmap-cell[data-date]");
+    const dateStr = cell?.dataset.date;
+    const dayWorkouts = dateStr ? workoutsByDate.get(dateStr) : undefined;
+    if (!cell || !dateStr) { hide(); return; }
+    const dateLabel = parseLocalDate(dateStr).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const totalMin = Math.round(dailyTotal.get(dateStr) ?? 0);
+    const rows = (dayWorkouts ?? [])
+      .map((w) => {
+        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
+        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${categoryOf(w.type).color}"></span>${w.type}${duration}</div>`;
+      })
+      .join("");
+    const summary = totalMin > 0 ? ` — ${totalMin} min` : " — no workouts";
+    tooltip.innerHTML = `<div class="hover-tooltip-title">${dateLabel}${summary}</div>${rows}`;
+    tooltip.style.display = "block";
+    const { offsetWidth: w, offsetHeight: h } = tooltip;
+    const left = e.clientX + 14 + w > window.innerWidth ? e.clientX - 14 - w : e.clientX + 14;
+    const top = e.clientY + 14 + h > window.innerHeight ? e.clientY - 14 - h : e.clientY + 14;
+    tooltip.style.left = `${Math.max(4, left)}px`;
+    tooltip.style.top = `${Math.max(4, top)}px`;
+  });
+  grid.addEventListener("mouseleave", hide);
+}
+
 function setupCalendar(data: SiteData) {
-  typeColors = buildTypeColors(data.workouts);
   workoutsByDate = new Map();
   for (const w of data.workouts) {
     const list = workoutsByDate.get(w.date) ?? [];
@@ -603,6 +684,7 @@ function setupCalendar(data: SiteData) {
   renderCalendarLegend();
   renderCalendar();
   setupCalendarTooltip();
+  renderWorkoutHeatmap(data.workouts, maxDate);
 }
 
 function formatSummary(s: SiteData["summary"]): string {
