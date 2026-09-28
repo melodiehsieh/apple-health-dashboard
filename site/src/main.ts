@@ -272,7 +272,16 @@ function aggregateTimeSeries(daily: DailyPoint[], range: Range, agg: "avg" | "su
     .sort((a, b) => a.period.getTime() - b.period.getTime());
 }
 
-function renderTimeSeries(containerId: string, data: TimeSeriesPoint[], yLabel: string) {
+// Apple's own Activity ring colors (Move/Exercise/Stand), so these charts
+// read as the same three metrics from the Activity app rather than
+// arbitrary chart colors.
+const ACTIVITY_RING_COLORS: Record<string, string> = {
+  move: "#FA114F",
+  exercise: "#92E82A",
+  stand: "#1EEAEA",
+};
+
+function renderTimeSeries(containerId: string, data: TimeSeriesPoint[], yLabel: string, color?: string) {
   const el = document.querySelector<HTMLDivElement>(`#${containerId}`)!;
   if (data.length === 0) {
     el.innerHTML = `<p class="muted">No data in this range.</p>`;
@@ -286,8 +295,8 @@ function renderTimeSeries(containerId: string, data: TimeSeriesPoint[], yLabel: 
     x: { label: null },
     y: { label: yLabel, grid: true },
     marks: [
-      Plot.lineY(data, { x: "period", y: "value", curve: "monotone-x" }),
-      Plot.dot(data, { x: "period", y: "value", r: 2.5 }),
+      Plot.lineY(data, { x: "period", y: "value", curve: "monotone-x", stroke: color }),
+      Plot.dot(data, { x: "period", y: "value", r: 2.5, stroke: color, fill: color }),
       Plot.tip(
         data,
         Plot.pointerX({
@@ -307,10 +316,11 @@ const TREND_CHARTS: Array<{
   key: keyof SiteData;
   agg: "avg" | "sum";
   yLabel: string;
+  color?: string;
 }> = [
-  { containerId: "active-energy-chart", key: "active_energy_daily", agg: "avg", yLabel: "active energy (cal/day)" },
-  { containerId: "exercise-time-chart", key: "exercise_time_daily", agg: "avg", yLabel: "exercise time (min/day)" },
-  { containerId: "stand-hours-chart", key: "stand_hours_daily", agg: "avg", yLabel: "stand hours/day" },
+  { containerId: "active-energy-chart", key: "active_energy_daily", agg: "avg", yLabel: "active energy (cal/day)", color: ACTIVITY_RING_COLORS.move },
+  { containerId: "exercise-time-chart", key: "exercise_time_daily", agg: "avg", yLabel: "exercise time (min/day)", color: ACTIVITY_RING_COLORS.exercise },
+  { containerId: "stand-hours-chart", key: "stand_hours_daily", agg: "avg", yLabel: "stand hours/day", color: ACTIVITY_RING_COLORS.stand },
   { containerId: "steps-chart", key: "steps_daily", agg: "avg", yLabel: "steps/day" },
   { containerId: "resting-hr-chart", key: "resting_hr_daily", agg: "avg", yLabel: "resting HR (bpm)" },
   { containerId: "vo2-max-chart", key: "vo2max_daily", agg: "avg", yLabel: "VO2 max (mL/min·kg)" },
@@ -320,7 +330,7 @@ function renderTrendCharts(data: SiteData, range: Range) {
   for (const chart of TREND_CHARTS) {
     const daily = data[chart.key] as DailyPoint[];
     const series = aggregateTimeSeries(daily, range, chart.agg);
-    renderTimeSeries(chart.containerId, series, chart.yLabel);
+    renderTimeSeries(chart.containerId, series, chart.yLabel, chart.color);
   }
 }
 
