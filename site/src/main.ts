@@ -21,7 +21,7 @@ const ZONE_COLORS: Record<string, string> = {
 
 type DailyPoint = { date: string; value: number };
 type DailyPaceByZone = { date: string; zone: string; avg_pace: number; n: number };
-type WorkoutEntry = { date: string; type: string; duration_min: number | null };
+type WorkoutEntry = { date: string; type: string; duration_min: number | null; distance_mi: number | null };
 type RoutePaceRow = { date: string; route: string; pace_min_per_mi: number; distance_mi: number };
 
 type SiteData = {
@@ -489,6 +489,15 @@ const TYPE_ABBR: Record<string, string> = {
   Hiking: "Hike", "Jump Rope": "Jump rope", Squash: "Squash", Climbing: "Climb", Pilates: "Pilates",
 };
 
+// Distance is the meaningful number for Walking/Running; everything else
+// only has duration.
+function workoutMetricLabel(w: WorkoutEntry): string {
+  if ((w.type === "Walking" || w.type === "Running") && w.distance_mi != null) {
+    return `${w.distance_mi.toFixed(1)} mi`;
+  }
+  return w.duration_min != null ? `${Math.round(w.duration_min)} min` : "";
+}
+
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 let calendarMonth = new Date();
@@ -517,7 +526,7 @@ function renderCalendar() {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayWorkouts = [...(workoutsByDate.get(dateStr) ?? [])].sort((a, b) => (b.duration_min ?? 0) - (a.duration_min ?? 0));
     const chips = dayWorkouts
-      .map((w) => `<span class="calendar-chip" style="background:${categoryOf(w.type).color}">${TYPE_ABBR[w.type] ?? w.type}</span>`)
+      .map((w) => `<span class="calendar-chip" style="background:${categoryOf(w.type).color}">${TYPE_ABBR[w.type] ?? w.type} ${workoutMetricLabel(w)}</span>`)
       .join("");
     html += `<div class="calendar-day" data-date="${dateStr}"><span class="calendar-day-number">${day}</span>${chips}</div>`;
   }
@@ -559,8 +568,8 @@ function setupCalendarTooltip() {
     const rows = dayWorkouts
       .map((w) => {
         const color = categoryOf(w.type).color;
-        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
-        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${color}"></span>${w.type}${duration}</div>`;
+        const metric = workoutMetricLabel(w);
+        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${color}"></span>${w.type}${metric ? ` — ${metric}` : ""}</div>`;
       })
       .join("");
     tooltip.innerHTML = `<div class="hover-tooltip-title">${dateLabel}</div>${rows}`;
@@ -641,8 +650,8 @@ function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
     const totalMin = Math.round(dailyTotal.get(dateStr) ?? 0);
     const rows = (dayWorkouts ?? [])
       .map((w) => {
-        const duration = w.duration_min != null ? ` — ${Math.round(w.duration_min)} min` : "";
-        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${categoryOf(w.type).color}"></span>${w.type}${duration}</div>`;
+        const metric = workoutMetricLabel(w);
+        return `<div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${categoryOf(w.type).color}"></span>${w.type}${metric ? ` — ${metric}` : ""}</div>`;
       })
       .join("");
     const summary = totalMin > 0 ? ` — ${totalMin} min` : " — no workouts";

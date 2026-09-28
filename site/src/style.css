@@ -293,6 +293,7 @@ section {
 .heatmap-months {
   display: grid;
   grid-auto-flow: column;
+  grid-auto-columns: 13px;
   gap: 3px;
   width: max-content;
   margin-bottom: 4px;
@@ -302,6 +303,7 @@ section {
   font-family: "DM Mono", monospace;
   font-size: 0.6rem;
   color: var(--ink-muted);
+  white-space: nowrap;
 }
 
 .heatmap-grid {

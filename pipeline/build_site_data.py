@@ -332,13 +332,18 @@ def build(data_dir: Path, out_path: Path, gpx_root: Path | None):
     vo2max["value"] = pd.to_numeric(vo2max["value"], errors="coerce")
     vo2max_daily = to_records(daily_mean(vo2max, "start_ts", "value"))
 
-    # --- Calendar: every workout, one row each, for the day-by-day view ---
+    # --- Calendar: every workout, one row each, for the day-by-day view.
+    # Includes distance so the site can show miles on Walking/Running
+    # chips instead of duration, which is the more meaningful number for
+    # those two types. ---
     calendar_workouts = workouts[workouts["start_ts"] < today_cutoff(workouts["start_ts"].dt.tz)]
+    calendar_workouts = calendar_workouts.merge(run_distance, on="workout_id", how="left")
     workouts_list = [
         {
             "date": row.start_ts.strftime("%Y-%m-%d"),
             "type": humanize_activity_type(row.activity_type),
             "duration_min": round(float(row.duration_min), 1) if pd.notna(row.duration_min) else None,
+            "distance_mi": round(float(row.distance_mi), 2) if pd.notna(row.distance_mi) else None,
         }
         for row in calendar_workouts.itertuples()
     ]
