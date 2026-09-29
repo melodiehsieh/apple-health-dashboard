@@ -525,7 +525,7 @@ function renderTrendCharts(data: SiteData, range: Range) {
 // than a trend chart. ----
 
 type SummaryPeriod = "week" | "month" | "year";
-let summaryPeriodType: SummaryPeriod = "month";
+let summaryPeriodType: SummaryPeriod = "year";
 let summaryAnchor = new Date();
 
 function periodBounds(anchor: Date, type: SummaryPeriod): { start: Date; end: Date } {
@@ -563,7 +563,9 @@ function formatPeriodLabel(anchor: Date, type: SummaryPeriod): string {
 // Small hand-rolled SVG pie -- no need for a charting library for two
 // five-slice summaries, and it keeps the same category colors used
 // everywhere else (calendar, heatmaps) instead of an arbitrary palette.
-function renderPieChart(containerId: string, data: { label: string; value: number; color: string }[], title: string) {
+type PieSlice = { label: string; value: number; color: string; valueLabel: string };
+
+function renderPieChart(containerId: string, data: PieSlice[], title: string) {
   const el = document.querySelector<HTMLDivElement>(`#${containerId}`)!;
   const slices = data.filter((d) => d.value > 0);
   const total = slices.reduce((s, d) => s + d.value, 0);
@@ -575,29 +577,59 @@ function renderPieChart(containerId: string, data: { label: string; value: numbe
     r = 46,
     cx = size / 2,
     cy = size / 2;
+
+  const attrs = (d: PieSlice, pct: number) =>
+    `data-label="${d.label}" data-color="${d.color}" data-value-label="${d.valueLabel}" data-pct="${pct}"`;
+
+  let shape: string;
   if (slices.length === 1) {
-    el.innerHTML = `<p class="pie-title">${title}</p><svg viewBox="0 0 ${size} ${size}" class="pie-svg"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${slices[0].color}"><title>${slices[0].label}: 100%</title></circle></svg>`;
-    return;
+    shape = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${slices[0].color}" ${attrs(slices[0], 100)} />`;
+  } else {
+    let angle = -90;
+    const toXY = (deg: number): [number, number] => {
+      const rad = (deg * Math.PI) / 180;
+      return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+    };
+    shape = slices
+      .map((d) => {
+        const frac = d.value / total;
+        const start = angle;
+        const end = angle + frac * 360;
+        angle = end;
+        const large = end - start > 180 ? 1 : 0;
+        const [x1, y1] = toXY(start);
+        const [x2, y2] = toXY(end);
+        const pct = Math.round(frac * 100);
+        return `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${d.color}" ${attrs(d, pct)} />`;
+      })
+      .join("");
   }
-  let angle = -90;
-  const toXY = (deg: number): [number, number] => {
-    const rad = (deg * Math.PI) / 180;
-    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  el.innerHTML = `<p class="pie-title">${title}</p><svg viewBox="0 0 ${size} ${size}" class="pie-svg">${shape}</svg>`;
+
+  const svg = el.querySelector("svg")!;
+  const tooltip = getOrCreateTooltipEl();
+  const hide = () => {
+    tooltip.style.display = "none";
   };
-  const paths = slices
-    .map((d) => {
-      const frac = d.value / total;
-      const start = angle;
-      const end = angle + frac * 360;
-      angle = end;
-      const large = end - start > 180 ? 1 : 0;
-      const [x1, y1] = toXY(start);
-      const [x2, y2] = toXY(end);
-      const pct = Math.round(frac * 100);
-      return `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${d.color}"><title>${d.label}: ${pct}%</title></path>`;
-    })
-    .join("");
-  el.innerHTML = `<p class="pie-title">${title}</p><svg viewBox="0 0 ${size} ${size}" class="pie-svg">${paths}</svg>`;
+  svg.addEventListener("mousemove", (e) => {
+    const target = (e.target as SVGElement).closest<SVGElement>("[data-label]");
+    if (!target) {
+      hide();
+      return;
+    }
+    const label = target.getAttribute("data-label")!;
+    const color = target.getAttribute("data-color")!;
+    const valueLabel = target.getAttribute("data-value-label")!;
+    const pct = target.getAttribute("data-pct")!;
+    tooltip.innerHTML = `<div class="hover-tooltip-title">${label}</div><div class="hover-tooltip-row"><span class="hover-tooltip-swatch" style="background:${color}"></span>${valueLabel} (${pct}%)</div>`;
+    tooltip.style.display = "block";
+    const { offsetWidth: w, offsetHeight: h } = tooltip;
+    const left = e.clientX + 14 + w > window.innerWidth ? e.clientX - 14 - w : e.clientX + 14;
+    const top = e.clientY + 14 + h > window.innerHeight ? e.clientY - 14 - h : e.clientY + 14;
+    tooltip.style.left = `${Math.max(4, left)}px`;
+    tooltip.style.top = `${Math.max(4, top)}px`;
+  });
+  svg.addEventListener("mouseleave", hide);
 }
 
 function renderTimeSummary() {
@@ -614,8 +646,10 @@ function renderTimeSummary() {
       cur.sessions += 1;
       // Any type with real distance data counts (Walking/Running always
       // have it; Hiking and Snowboarding do too, tracked under their own
-      // HealthKit metrics but joined into the same distance_mi field).
-      if (w.distance_mi != null) {
+      // HealthKit metrics but joined into the same distance_mi field) --
+      // except Squash, where the "distance" is just incidental in-court
+      // motion, not a meaningful number.
+      if (w.distance_mi != null && w.type !== "Squash") {
         cur.distance += w.distance_mi;
         cur.hasDistance = true;
       }
@@ -675,7 +709,11 @@ function renderTimeSummary() {
     byCategory.set(c, cur);
   }
   const pieData = (key: "duration" | "sessions") =>
-    CATEGORIES.filter((c) => byCategory.has(c)).map((c) => ({ label: c.name, value: byCategory.get(c)![key], color: c.color }));
+    CATEGORIES.filter((c) => byCategory.has(c)).map((c) => {
+      const v = byCategory.get(c)!;
+      const valueLabel = key === "duration" ? `${(v.duration / 60).toFixed(1)} hrs` : `${v.sessions} session${v.sessions === 1 ? "" : "s"}`;
+      return { label: c.name, value: v[key], color: c.color, valueLabel };
+    });
 
   renderPieChart("summary-time-pie", pieData("duration"), "Time");
   renderPieChart("summary-session-pie", pieData("sessions"), "Sessions");
