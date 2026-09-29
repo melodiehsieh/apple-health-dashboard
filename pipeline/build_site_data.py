@@ -333,11 +333,19 @@ def build(data_dir: Path, out_path: Path, gpx_root: Path | None):
     vo2max_daily = to_records(daily_mean(vo2max, "start_ts", "value"))
 
     # --- Calendar: every workout, one row each, for the day-by-day view.
-    # Includes distance so the site can show miles on Walking/Running
-    # chips instead of duration, which is the more meaningful number for
-    # those two types. ---
+    # Includes distance so the site can show it (miles on Walking/Running
+    # chips, and for the Time Summary tab's per-activity totals) instead of
+    # just duration. Snowboarding tracks distance under its own metric
+    # (DistanceDownhillSnowSports), not DistanceWalkingRunning, so it needs
+    # its own join -- coalesced with run_distance since a given workout only
+    # ever has one of the two. ---
+    snow_distance = stats[stats["metric_type"] == "HKQuantityTypeIdentifierDistanceDownhillSnowSports"][["workout_id", "sum"]]
+    snow_distance = snow_distance.rename(columns={"sum": "snow_distance_mi"})
+
     calendar_workouts = workouts[workouts["start_ts"] < today_cutoff(workouts["start_ts"].dt.tz)]
     calendar_workouts = calendar_workouts.merge(run_distance, on="workout_id", how="left")
+    calendar_workouts = calendar_workouts.merge(snow_distance, on="workout_id", how="left")
+    calendar_workouts["distance_mi"] = calendar_workouts["distance_mi"].fillna(calendar_workouts["snow_distance_mi"])
     workouts_list = [
         {
             "date": row.start_ts.strftime("%Y-%m-%d"),
