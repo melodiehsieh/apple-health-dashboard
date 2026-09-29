@@ -622,7 +622,7 @@ function setupTimeSummary(data: SiteData) {
 // logged from /log-pr.html on your phone -- no code changes or redeploys
 // needed to add one. ----
 
-type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string; note?: string };
+type PRRecord = { id: string; exercise: string; weight_lbs: number | null; reps: number; date: string; note?: string };
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -655,7 +655,7 @@ async function renderPRs() {
           (r) => `
         <tr>
           <td>${escapeHtml(r.exercise)}${r.note ? `<div class="pr-note">${escapeHtml(r.note)}</div>` : ""}</td>
-          <td>${r.weight_lbs} lb</td>
+          <td>${r.weight_lbs != null ? `${r.weight_lbs} lb` : "—"}</td>
           <td>${r.reps}</td>
           <td>${parseLocalDate(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
         </tr>`,

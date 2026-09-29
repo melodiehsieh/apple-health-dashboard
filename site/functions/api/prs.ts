@@ -17,7 +17,7 @@ interface Env {
 
 type PagesFunction<E> = (context: { request: Request; env: E }) => Response | Promise<Response>;
 
-type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string; note?: string };
+type PRRecord = { id: string; exercise: string; weight_lbs: number | null; reps: number; date: string; note?: string };
 
 const KEY = "records";
 const MAX_EXERCISE_LEN = 80;
@@ -47,9 +47,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.PR_PASSCODE || passcode !== env.PR_PASSCODE) {
     return json({ error: "Incorrect passcode" }, 401);
   }
-  const weightNum = Number(weight_lbs);
+  // Weight is optional -- pull-ups etc. only have reps.
+  const hasWeight = weight_lbs !== undefined && weight_lbs !== null && weight_lbs !== "";
+  const weightNum = hasWeight ? Number(weight_lbs) : null;
   const repsNum = Number(reps);
-  if (typeof exercise !== "string" || !exercise.trim() || !Number.isFinite(weightNum) || !Number.isFinite(repsNum) || typeof date !== "string" || !date) {
+  if (
+    typeof exercise !== "string" ||
+    !exercise.trim() ||
+    (hasWeight && !Number.isFinite(weightNum)) ||
+    !Number.isFinite(repsNum) ||
+    typeof date !== "string" ||
+    !date
+  ) {
     return json({ error: "Missing or invalid fields" }, 400);
   }
 

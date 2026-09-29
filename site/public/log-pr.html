@@ -175,7 +175,7 @@
         <input id="exercise" name="exercise" type="text" required placeholder="Deadlift" autocomplete="off" />
 
         <label for="weight">Weight (lb)</label>
-        <input id="weight" name="weight" type="number" step="0.5" min="0" required inputmode="decimal" />
+        <input id="weight" name="weight" type="number" step="0.5" min="0" inputmode="decimal" placeholder="Leave blank for bodyweight (e.g. pull-ups)" />
 
         <label for="reps">Reps</label>
         <input id="reps" name="reps" type="number" step="1" min="1" required inputmode="numeric" value="1" />
@@ -226,7 +226,7 @@
             .map(
               (r) =>
                 "<tr><td>" + escapeHtml(r.exercise) + (r.note ? '<div class="pr-note">' + escapeHtml(r.note) + "</div>" : "") +
-                "</td><td>" + r.weight_lbs + " lb</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
+                "</td><td>" + (r.weight_lbs != null ? r.weight_lbs + " lb" : "—") + "</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
                 '</td><td><button class="del" data-id="' + r.id + '" title="Delete">&times;</button></td></tr>',
             )
             .join("") +
@@ -274,7 +274,7 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               exercise: document.getElementById("exercise").value,
-              weight_lbs: Number(document.getElementById("weight").value),
+              weight_lbs: document.getElementById("weight").value ? Number(document.getElementById("weight").value) : null,
               reps: Number(document.getElementById("reps").value),
               date: document.getElementById("date").value,
               note: document.getElementById("note").value,
