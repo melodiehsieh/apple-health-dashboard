@@ -137,6 +137,12 @@ section {
   box-shadow: none;
 }
 
+#pace-by-zone-table,
+#summary-table,
+#prs-table {
+  overflow-x: auto;
+}
+
 .data-table {
   border-collapse: collapse;
   font-size: 0.78rem;
@@ -236,7 +242,7 @@ section {
 
 #calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   margin-top: 16px;
 }
@@ -407,9 +413,88 @@ section {
   flex-shrink: 0;
 }
 
+/* Same-route comparison: left-tab route picker + single-route chart */
+.route-compare {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.route-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 160px;
+}
+
+.route-tab {
+  appearance: none;
+  border: 1px solid var(--card-border);
+  background: var(--cell);
+  border-radius: 4px;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: "Karla", sans-serif;
+}
+
+.route-tab b {
+  font-size: 0.78rem;
+  color: var(--ink-strong);
+}
+
+.route-tab span {
+  font-family: "DM Mono", monospace;
+  font-size: 0.64rem;
+  color: var(--ink-muted);
+}
+
+.route-tab.active {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.route-tab.active b,
+.route-tab.active span {
+  color: var(--on-accent);
+}
+
+#route-pace-chart {
+  flex: 1;
+  min-width: 0;
+}
+
 @media (max-width: 560px) {
   .section-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .route-compare {
+    flex-direction: column;
+  }
+
+  .route-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: none;
+  }
+
+  .route-tab {
+    flex: 1 1 140px;
+  }
+
+  .calendar-chip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .calendar-day {
+    min-height: 58px;
+    padding: 3px;
   }
 }

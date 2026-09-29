@@ -13,12 +13,14 @@
         <p id="summary" class="muted">Loading&hellip;</p>
       </header>
       <nav id="top-tabs" class="tabs">
-        <button data-tab="running" class="active">Running</button>
+        <button data-tab="calendar" class="active">Calendar</button>
         <button data-tab="health">Health Trends</button>
-        <button data-tab="calendar">Calendar</button>
+        <button data-tab="running">Running</button>
+        <button data-tab="summary">Time Summary</button>
+        <button data-tab="prs">PRs</button>
       </nav>
       <main>
-        <section data-tab-panel="running">
+        <section data-tab-panel="running" hidden>
           <div class="card">
             <div class="section-header">
               <div>
@@ -39,6 +41,48 @@
               clean data are left out entirely rather than shown as an
               unreliable average.
             </p>
+
+            <h3>Pace by heart-rate zone</h3>
+            <p class="muted">
+              Average pace at each HR zone, by period &mdash; every
+              15-second sample from every run is tagged by the zone your
+              heart rate was actually in at that moment, so a run's
+              warmup/tempo/cooldown segments each count toward their own
+              zone instead of averaging into one misleading number. A
+              period/zone combination with under 5 minutes of data is left
+              out of the trend rather than shown as an unreliable average.
+            </p>
+            <div id="pace-by-zone-view"></div>
+            <h3>Table</h3>
+            <div id="pace-by-zone-table"></div>
+
+            <h3>Same-route comparison</h3>
+            <p class="muted">
+              Runs that start in the same place and cover the same distance
+              are almost certainly the same physical loop, so pace
+              differences here reflect fitness rather than a harder or
+              hillier course. Only routes run at least 7 times are shown;
+              pick a route to see its own runs at a scale that isn't
+              squished by the others.
+            </p>
+            <div class="route-compare">
+              <div class="route-tabs" id="route-tabs"></div>
+              <div id="route-pace-chart"></div>
+            </div>
+
+            <h3>Miles per period</h3>
+            <p class="muted">
+              Total running mileage per month, except Past Month, which
+              shows one bar per week.
+            </p>
+            <div id="runs-miles-chart"></div>
+
+            <h3>Runs per period</h3>
+            <p class="muted">
+              Number of runs per month, except Past Month, which shows one
+              bar per week.
+            </p>
+            <div id="runs-count-chart"></div>
 
             <h3>Efficiency Factor</h3>
             <p class="muted">
@@ -68,44 +112,6 @@
               mix hard and easy effort into one trend.
             </p>
             <div id="ef-steady-chart"></div>
-
-            <h3>Pace by heart-rate zone</h3>
-            <p class="muted">
-              Average pace at each HR zone, by period &mdash; every
-              15-second sample from every run is tagged by the zone your
-              heart rate was actually in at that moment, so a run's
-              warmup/tempo/cooldown segments each count toward their own
-              zone instead of averaging into one misleading number. A
-              period/zone combination with under 5 minutes of data is left
-              out of the trend rather than shown as an unreliable average.
-            </p>
-            <div id="pace-by-zone-view"></div>
-            <h3>Table</h3>
-            <div id="pace-by-zone-table"></div>
-
-            <h3>Same-route comparison</h3>
-            <p class="muted">
-              Runs that start in the same place and cover the same distance
-              are almost certainly the same physical loop, so pace
-              differences here reflect fitness rather than a harder or
-              hillier course. Only routes run at least 7 times are shown;
-              each dot is one run.
-            </p>
-            <div id="route-pace-chart"></div>
-
-            <h3>Runs per period</h3>
-            <p class="muted">
-              Number of runs per month, except Past Month, which shows one
-              bar per week.
-            </p>
-            <div id="runs-count-chart"></div>
-
-            <h3>Miles per period</h3>
-            <p class="muted">
-              Total running mileage per month, except Past Month, which
-              shows one bar per week.
-            </p>
-            <div id="runs-miles-chart"></div>
           </div>
         </section>
 
@@ -141,7 +147,7 @@
           </div>
         </section>
 
-        <section data-tab-panel="calendar" hidden>
+        <section data-tab-panel="calendar">
           <div class="card">
             <div class="section-header">
               <div>
@@ -190,6 +196,40 @@
               <div id="type-heatmap-grid" class="heatmap-grid"></div>
             </div>
             <div id="type-heatmap-legend" class="calendar-legend"></div>
+          </div>
+        </section>
+
+        <section data-tab-panel="summary" hidden>
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h2>Time by activity</h2>
+                <p class="cardsub">how much time (and distance) went into each kind of workout</p>
+              </div>
+              <div id="summary-period-type" class="segmented">
+                <button data-period="week">Week</button>
+                <button data-period="month" class="active">Month</button>
+                <button data-period="year">Year</button>
+              </div>
+            </div>
+            <div class="calendar-nav">
+              <button id="summary-prev">&larr;</button>
+              <span id="summary-period-label" class="calendar-month-label"></span>
+              <button id="summary-next">&rarr;</button>
+            </div>
+            <div id="summary-table"></div>
+          </div>
+        </section>
+
+        <section data-tab-panel="prs" hidden>
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h2>Personal records</h2>
+                <p class="cardsub">max lifts, tracked by hand</p>
+              </div>
+            </div>
+            <div id="prs-table"></div>
           </div>
         </section>
       </main>

@@ -1,5 +1,6 @@
 import * as Plot from "@observablehq/plot";
 import "./style.css";
+import prsData from "./prs.json";
 
 const ZONE_ORDER = ["Z1", "Z2", "Z3", "Z4", "Z5"];
 
@@ -272,41 +273,100 @@ function renderPaceTrendCharts(data: SiteData, range: Range) {
 }
 
 // ---- Same-route comparison: every run of a route repeated often enough
-// to trend, plotted on its own line -- not bucketed by range, since each
-// route is already a sparse, all-time series of individual runs. ----
+// to trend. One route selected at a time (left-tab list), rather than all
+// routes on one shared scale, since routes run at very different paces
+// otherwise squish each other's detail flat. ----
 
-function renderRouteComparison(data: SiteData) {
+type RoutePoint = RoutePaceRow & { dateObj: Date };
+type RouteMeta = { label: string; shortLabel: string; rows: RoutePoint[]; avgDistance: number; startLabel: string; endLabel: string };
+
+let routeMetas: RouteMeta[] = [];
+let selectedRoute: string | null = null;
+
+function buildRouteMetas(data: SiteData): RouteMeta[] {
+  const rows: RoutePoint[] = data.route_pace.map((r) => ({ ...r, dateObj: parseLocalDate(r.date) }));
+  const byRoute = new Map<string, RoutePoint[]>();
+  for (const r of rows) {
+    const list = byRoute.get(r.route) ?? [];
+    list.push(r);
+    byRoute.set(r.route, list);
+  }
+  const fmtMonYr = (d: Date) => `${d.toLocaleDateString("en-US", { month: "short" })} '${String(d.getFullYear()).slice(2)}`;
+  return [...byRoute.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, list]) => {
+      const sorted = [...list].sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+      const avgDistance = list.reduce((s, r) => s + r.distance_mi, 0) / list.length;
+      return {
+        label,
+        shortLabel: label.replace(/\s*\(.*\)/, ""),
+        rows: sorted,
+        avgDistance,
+        startLabel: fmtMonYr(sorted[0].dateObj),
+        endLabel: fmtMonYr(sorted[sorted.length - 1].dateObj),
+      };
+    });
+}
+
+function renderRouteChart(meta: RouteMeta) {
   const el = document.querySelector<HTMLDivElement>("#route-pace-chart")!;
   el.innerHTML = "";
-  if (data.route_pace.length === 0) {
-    el.innerHTML = `<p class="muted">No routes repeated often enough yet.</p>`;
-    return;
-  }
-  const rows = data.route_pace.map((r) => ({ ...r, dateObj: parseLocalDate(r.date) }));
-  const routes = [...new Set(rows.map((r) => r.route))].sort();
   const plot = Plot.plot({
-    width: Math.min(880, document.body.clientWidth - 48),
+    width: Math.min(700, document.body.clientWidth - 48),
     height: 320,
     marginLeft: 60,
     style: CHART_STYLE,
     x: { label: null },
     y: { label: "pace (min/mi)", grid: true },
-    color: { label: "route", domain: routes, legend: true },
     marks: [
-      Plot.lineY(rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "route", curve: "monotone-x" }),
-      Plot.dot(rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "route", r: 3 }),
+      Plot.lineY(meta.rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "#3E7C7B", curve: "monotone-x" }),
+      Plot.dot(meta.rows, { x: "dateObj", y: "pace_min_per_mi", stroke: "#3E7C7B", fill: "#3E7C7B", r: 3 }),
       Plot.tip(
-        rows,
-        Plot.pointer({
+        meta.rows,
+        Plot.pointerX({
           x: "dateObj",
           y: "pace_min_per_mi",
-          title: (d: RoutePaceRow & { dateObj: Date }) =>
-            `${fmtTipDate(d.dateObj)}\n${d.route}: ${d.pace_min_per_mi.toFixed(1)} min/mi (${d.distance_mi.toFixed(2)} mi)`,
+          title: (d: RoutePoint) => `${fmtTipDate(d.dateObj)}\n${d.pace_min_per_mi.toFixed(1)} min/mi (${d.distance_mi.toFixed(2)} mi)`,
         }),
       ),
     ],
   });
   el.append(plot);
+}
+
+function renderRouteTabs() {
+  const el = document.querySelector<HTMLDivElement>("#route-tabs")!;
+  el.innerHTML = routeMetas
+    .map(
+      (m) => `
+      <button class="route-tab${m.label === selectedRoute ? " active" : ""}" data-route="${m.label}">
+        <b>${m.shortLabel}</b>
+        <span>~${m.avgDistance.toFixed(1)} mi</span>
+        <span>${m.startLabel} &ndash; ${m.endLabel}</span>
+      </button>`,
+    )
+    .join("");
+  el.querySelectorAll<HTMLButtonElement>(".route-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedRoute = btn.dataset.route!;
+      renderRouteTabs();
+      renderRouteChart(routeMetas.find((m) => m.label === selectedRoute)!);
+    });
+  });
+}
+
+function renderRouteComparison(data: SiteData) {
+  routeMetas = buildRouteMetas(data);
+  const tabsEl = document.querySelector<HTMLDivElement>("#route-tabs")!;
+  const chartEl = document.querySelector<HTMLDivElement>("#route-pace-chart")!;
+  if (routeMetas.length === 0) {
+    tabsEl.innerHTML = "";
+    chartEl.innerHTML = `<p class="muted">No routes repeated often enough yet.</p>`;
+    return;
+  }
+  selectedRoute = routeMetas[0].label;
+  renderRouteTabs();
+  renderRouteChart(routeMetas[0]);
 }
 
 // ---- Run frequency/volume: bar charts of run count and total mileage
@@ -443,6 +503,154 @@ function renderTrendCharts(data: SiteData, range: Range) {
     const series = aggregateTimeSeries(daily, range, chart.agg);
     renderTimeSeries(chart.containerId, series, chart.yLabel, chart.color);
   }
+}
+
+// ---- Time summary: total time (and distance, for Walking/Running) per
+// exact workout type over a browsable week/month/year, instead of a
+// fixed range selector -- reads more like "how much of my time went where"
+// than a trend chart. ----
+
+type SummaryPeriod = "week" | "month" | "year";
+let summaryPeriodType: SummaryPeriod = "month";
+let summaryAnchor = new Date();
+
+function periodBounds(anchor: Date, type: SummaryPeriod): { start: Date; end: Date } {
+  if (type === "week") {
+    const day = anchor.getDay();
+    const diff = (day === 0 ? -6 : 1) - day; // Monday-start, matching bucketStart's convention
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + diff);
+    return { start, end: new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7) };
+  }
+  if (type === "month") {
+    const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    return { start, end: new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1) };
+  }
+  const start = new Date(anchor.getFullYear(), 0, 1);
+  return { start, end: new Date(anchor.getFullYear() + 1, 0, 1) };
+}
+
+function shiftPeriod(anchor: Date, type: SummaryPeriod, dir: 1 | -1): Date {
+  if (type === "week") return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + 7 * dir);
+  if (type === "month") return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
+  return new Date(anchor.getFullYear() + dir, 0, 1);
+}
+
+function formatPeriodLabel(anchor: Date, type: SummaryPeriod): string {
+  const { start, end } = periodBounds(anchor, type);
+  if (type === "month") return start.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  if (type === "year") return String(start.getFullYear());
+  const endInclusive = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+  const sameMonth = start.getMonth() === endInclusive.getMonth();
+  const startStr = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const endStr = endInclusive.toLocaleDateString("en-US", sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" });
+  return `${startStr}–${endStr}, ${start.getFullYear()}`;
+}
+
+function renderTimeSummary() {
+  const { start, end } = periodBounds(summaryAnchor, summaryPeriodType);
+  document.querySelector<HTMLSpanElement>("#summary-period-label")!.textContent = formatPeriodLabel(summaryAnchor, summaryPeriodType);
+
+  const byType = new Map<string, { duration: number; distance: number; hasDistance: boolean }>();
+  for (const [dateStr, items] of workoutsByDate) {
+    const d = parseLocalDate(dateStr);
+    if (d < start || d >= end) continue;
+    for (const w of items) {
+      const cur = byType.get(w.type) ?? { duration: 0, distance: 0, hasDistance: false };
+      cur.duration += w.duration_min ?? 0;
+      if ((w.type === "Walking" || w.type === "Running") && w.distance_mi != null) {
+        cur.distance += w.distance_mi;
+        cur.hasDistance = true;
+      }
+      byType.set(w.type, cur);
+    }
+  }
+
+  const el = document.querySelector<HTMLDivElement>("#summary-table")!;
+  const rows = [...byType.entries()].sort((a, b) => b[1].duration - a[1].duration);
+  if (rows.length === 0) {
+    el.innerHTML = `<p class="muted">No workouts in this period.</p>`;
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "data-table";
+  table.innerHTML = `
+    <thead><tr><th>Activity</th><th>Time</th><th>Distance</th></tr></thead>
+    <tbody>
+      ${rows
+        .map(
+          ([type, v]) => `
+        <tr>
+          <td>${type}</td>
+          <td>${(v.duration / 60).toFixed(1)} hrs</td>
+          <td>${v.hasDistance ? v.distance.toFixed(1) + " mi" : "—"}</td>
+        </tr>`,
+        )
+        .join("")}
+    </tbody>
+  `;
+  el.innerHTML = "";
+  el.append(table);
+}
+
+function setupTimeSummary(data: SiteData) {
+  const maxDateStr = data.workouts.reduce(
+    (max, w) => (w.date > max ? w.date : max),
+    data.workouts[0]?.date ?? new Date().toISOString().slice(0, 10),
+  );
+  summaryAnchor = parseLocalDate(maxDateStr);
+
+  document.querySelectorAll<HTMLButtonElement>("#summary-period-type button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      summaryPeriodType = btn.dataset.period as SummaryPeriod;
+      document.querySelectorAll("#summary-period-type button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderTimeSummary();
+    });
+  });
+  document.querySelector("#summary-prev")!.addEventListener("click", () => {
+    summaryAnchor = shiftPeriod(summaryAnchor, summaryPeriodType, -1);
+    renderTimeSummary();
+  });
+  document.querySelector("#summary-next")!.addEventListener("click", () => {
+    summaryAnchor = shiftPeriod(summaryAnchor, summaryPeriodType, 1);
+    renderTimeSummary();
+  });
+
+  renderTimeSummary();
+}
+
+// ---- Personal records: hand-maintained (Apple Health has no 1RM data),
+// edited directly in prs.json. ----
+
+type PRRecord = { exercise: string; weight_lbs: number; reps: number; date: string };
+
+function renderPRs() {
+  const el = document.querySelector<HTMLDivElement>("#prs-table")!;
+  const records = prsData as PRRecord[];
+  if (records.length === 0) {
+    el.innerHTML = `<p class="muted">No PRs logged yet — add entries to <code>site/src/prs.json</code> (exercise, weight_lbs, reps, date) and they'll show up here.</p>`;
+    return;
+  }
+  const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+  const table = document.createElement("table");
+  table.className = "data-table";
+  table.innerHTML = `
+    <thead><tr><th>Exercise</th><th>Weight</th><th>Reps</th><th>Date</th></tr></thead>
+    <tbody>
+      ${sorted
+        .map(
+          (r) => `
+        <tr>
+          <td>${r.exercise}</td>
+          <td>${r.weight_lbs} lb</td>
+          <td>${r.reps}</td>
+          <td>${parseLocalDate(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+        </tr>`,
+        )
+        .join("")}
+    </tbody>
+  `;
+  el.innerHTML = "";
+  el.append(table);
 }
 
 // ---- Top-level tabs ----
@@ -786,6 +994,8 @@ async function main() {
   renderRunsVolumeCharts(data, paceRange);
   renderTrendCharts(data, trendRange);
   setupCalendar(data);
+  setupTimeSummary(data);
+  renderPRs();
 }
 
 main();
