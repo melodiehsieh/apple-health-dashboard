@@ -9,7 +9,7 @@
   <body>
     <div id="app">
       <header>
-        <h1>Health Dashboard</h1>
+        <h1>Activity Tracking</h1>
         <p id="summary" class="muted">Loading&hellip;</p>
       </header>
       <nav id="top-tabs" class="tabs">
@@ -217,7 +217,13 @@
               <span id="summary-period-label" class="calendar-month-label"></span>
               <button id="summary-next">&rarr;</button>
             </div>
-            <div id="summary-table"></div>
+            <div class="summary-layout">
+              <div id="summary-table" class="summary-table-col"></div>
+              <div class="summary-charts-col">
+                <div id="summary-time-pie"></div>
+                <div id="summary-session-pie"></div>
+              </div>
+            </div>
           </div>
         </section>
 

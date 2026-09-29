@@ -291,20 +291,35 @@ function buildRouteMetas(data: SiteData): RouteMeta[] {
     byRoute.set(r.route, list);
   }
   const fmtMonYr = (d: Date) => `${d.toLocaleDateString("en-US", { month: "short" })} '${String(d.getFullYear()).slice(2)}`;
-  return [...byRoute.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([label, list]) => {
-      const sorted = [...list].sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-      const avgDistance = list.reduce((s, r) => s + r.distance_mi, 0) / list.length;
-      return {
-        label,
-        shortLabel: label.replace(/\s*\(.*\)/, ""),
-        rows: sorted,
-        avgDistance,
-        startLabel: fmtMonYr(sorted[0].dateObj),
-        endLabel: fmtMonYr(sorted[sorted.length - 1].dateObj),
-      };
-    });
+  const byOriginalLetter = new Map(
+    [...byRoute.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([label, list]) => {
+        const sorted = [...list].sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+        const avgDistance = list.reduce((s, r) => s + r.distance_mi, 0) / list.length;
+        return [
+          label.match(/Route (\w)/)?.[1] ?? label,
+          {
+            label,
+            shortLabel: label.replace(/\s*\(.*\)/, ""),
+            rows: sorted,
+            avgDistance,
+            startLabel: fmtMonYr(sorted[0].dateObj),
+            endLabel: fmtMonYr(sorted[sorted.length - 1].dateObj),
+          },
+        ] as const;
+      }),
+  );
+
+  // Display order is a deliberate preference (least- to most-familiar
+  // route), not the pipeline's repeat-count ranking -- re-labeled A-D in
+  // that order so the tabs read left to right the same way regardless of
+  // which physical loop is actually repeated most.
+  const DISPLAY_ORDER = ["C", "D", "B", "A"];
+  return DISPLAY_ORDER.filter((letter) => byOriginalLetter.has(letter)).map((letter, i) => {
+    const meta = byOriginalLetter.get(letter)!;
+    return { ...meta, shortLabel: `Route ${String.fromCharCode(65 + i)}` };
+  });
 }
 
 function renderRouteChart(meta: RouteMeta) {
@@ -545,18 +560,62 @@ function formatPeriodLabel(anchor: Date, type: SummaryPeriod): string {
   return `${startStr}–${endStr}, ${start.getFullYear()}`;
 }
 
+// Small hand-rolled SVG pie -- no need for a charting library for two
+// five-slice summaries, and it keeps the same category colors used
+// everywhere else (calendar, heatmaps) instead of an arbitrary palette.
+function renderPieChart(containerId: string, data: { label: string; value: number; color: string }[], title: string) {
+  const el = document.querySelector<HTMLDivElement>(`#${containerId}`)!;
+  const slices = data.filter((d) => d.value > 0);
+  const total = slices.reduce((s, d) => s + d.value, 0);
+  if (total <= 0) {
+    el.innerHTML = `<p class="pie-title">${title}</p><p class="muted" style="font-size:0.68rem">No data.</p>`;
+    return;
+  }
+  const size = 108,
+    r = 46,
+    cx = size / 2,
+    cy = size / 2;
+  if (slices.length === 1) {
+    el.innerHTML = `<p class="pie-title">${title}</p><svg viewBox="0 0 ${size} ${size}" class="pie-svg"><circle cx="${cx}" cy="${cy}" r="${r}" fill="${slices[0].color}"><title>${slices[0].label}: 100%</title></circle></svg>`;
+    return;
+  }
+  let angle = -90;
+  const toXY = (deg: number): [number, number] => {
+    const rad = (deg * Math.PI) / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  const paths = slices
+    .map((d) => {
+      const frac = d.value / total;
+      const start = angle;
+      const end = angle + frac * 360;
+      angle = end;
+      const large = end - start > 180 ? 1 : 0;
+      const [x1, y1] = toXY(start);
+      const [x2, y2] = toXY(end);
+      const pct = Math.round(frac * 100);
+      return `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${d.color}"><title>${d.label}: ${pct}%</title></path>`;
+    })
+    .join("");
+  el.innerHTML = `<p class="pie-title">${title}</p><svg viewBox="0 0 ${size} ${size}" class="pie-svg">${paths}</svg>`;
+}
+
 function renderTimeSummary() {
   const { start, end } = periodBounds(summaryAnchor, summaryPeriodType);
   document.querySelector<HTMLSpanElement>("#summary-period-label")!.textContent = formatPeriodLabel(summaryAnchor, summaryPeriodType);
 
-  const byType = new Map<string, { duration: number; distance: number; hasDistance: boolean }>();
+  const byType = new Map<string, { duration: number; distance: number; hasDistance: boolean; sessions: number }>();
   for (const [dateStr, items] of workoutsByDate) {
     const d = parseLocalDate(dateStr);
     if (d < start || d >= end) continue;
     for (const w of items) {
-      const cur = byType.get(w.type) ?? { duration: 0, distance: 0, hasDistance: false };
+      const cur = byType.get(w.type) ?? { duration: 0, distance: 0, hasDistance: false, sessions: 0 };
       cur.duration += w.duration_min ?? 0;
-      if ((w.type === "Walking" || w.type === "Running") && w.distance_mi != null) {
+      cur.sessions += 1;
+      // Any type with real distance data counts (Walking/Running always
+      // have it; Hiking and Snowboarding do too, tracked under their own
+      // HealthKit metrics but joined into the same distance_mi field).
+      if (w.distance_mi != null) {
         cur.distance += w.distance_mi;
         cur.hasDistance = true;
       }
@@ -568,27 +627,58 @@ function renderTimeSummary() {
   const rows = [...byType.entries()].sort((a, b) => b[1].duration - a[1].duration);
   if (rows.length === 0) {
     el.innerHTML = `<p class="muted">No workouts in this period.</p>`;
+    document.querySelector<HTMLDivElement>("#summary-time-pie")!.innerHTML = "";
+    document.querySelector<HTMLDivElement>("#summary-session-pie")!.innerHTML = "";
     return;
   }
+
+  const totalDuration = rows.reduce((s, [, v]) => s + v.duration, 0);
+  const totalSessions = rows.reduce((s, [, v]) => s + v.sessions, 0);
+  const totalDistance = rows.reduce((s, [, v]) => s + (v.hasDistance ? v.distance : 0), 0);
+  const anyDistance = rows.some(([, v]) => v.hasDistance);
+
   const table = document.createElement("table");
   table.className = "data-table";
   table.innerHTML = `
-    <thead><tr><th>Activity</th><th>Time</th><th>Distance</th></tr></thead>
+    <thead><tr><th>Activity</th><th>Sessions</th><th>Time</th><th>Distance</th></tr></thead>
     <tbody>
       ${rows
         .map(
           ([type, v]) => `
         <tr>
           <td>${type}</td>
+          <td>${v.sessions}</td>
           <td>${(v.duration / 60).toFixed(1)} hrs</td>
           <td>${v.hasDistance ? v.distance.toFixed(1) + " mi" : "—"}</td>
         </tr>`,
         )
         .join("")}
+      <tr class="totals-row">
+        <td>Total</td>
+        <td>${totalSessions}</td>
+        <td>${(totalDuration / 60).toFixed(1)} hrs</td>
+        <td>${anyDistance ? totalDistance.toFixed(1) + " mi" : "—"}</td>
+      </tr>
     </tbody>
   `;
   el.innerHTML = "";
   el.append(table);
+
+  // Pies group by category (5 colors) rather than exact type (up to ~19),
+  // same reasoning as the calendar's category legend.
+  const byCategory = new Map<(typeof CATEGORIES)[number], { duration: number; sessions: number }>();
+  for (const [type, v] of rows) {
+    const c = categoryOf(type);
+    const cur = byCategory.get(c) ?? { duration: 0, sessions: 0 };
+    cur.duration += v.duration;
+    cur.sessions += v.sessions;
+    byCategory.set(c, cur);
+  }
+  const pieData = (key: "duration" | "sessions") =>
+    CATEGORIES.filter((c) => byCategory.has(c)).map((c) => ({ label: c.name, value: byCategory.get(c)![key], color: c.color }));
+
+  renderPieChart("summary-time-pie", pieData("duration"), "Time");
+  renderPieChart("summary-session-pie", pieData("sessions"), "Sessions");
 }
 
 function setupTimeSummary(data: SiteData) {
@@ -974,7 +1064,7 @@ function setupCalendar(data: SiteData) {
 
 function formatSummary(s: SiteData["summary"]): string {
   const fmt = (t: string) => new Date(t).toLocaleDateString("en-US", { year: "numeric", month: "short" });
-  return `${s.total_workouts} workouts (${s.running_workouts} runs) from ${fmt(s.first_ts)} to ${fmt(s.last_ts)}`;
+  return `${s.total_workouts} workouts from ${fmt(s.first_ts)} to ${fmt(s.last_ts)}`;
 }
 
 let paceRange: Range = DEFAULT_RANGE;

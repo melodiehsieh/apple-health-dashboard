@@ -189,6 +189,68 @@ section {
   white-space: normal;
 }
 
+.totals-row td {
+  font-weight: 700;
+  color: var(--ink-strong);
+  border-top: 2px solid var(--ink-strong);
+  border-bottom: none;
+}
+
+.summary-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  margin-top: 4px;
+}
+
+.summary-table-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.summary-charts-col {
+  flex: 0 0 130px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pie-title {
+  font-family: "Karla", sans-serif;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+  font-weight: 700;
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.pie-svg {
+  display: block;
+  width: 100%;
+  max-width: 120px;
+  margin: 0 auto;
+}
+
+@media (max-width: 640px) {
+  .summary-layout {
+    flex-direction: column;
+  }
+
+  .summary-charts-col {
+    flex-direction: row;
+    flex: none;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .summary-charts-col > div {
+    flex: 1 1 120px;
+    max-width: 150px;
+  }
+}
+
 .data-table thead th {
   font-family: "Karla", sans-serif;
   font-size: 0.65rem;
