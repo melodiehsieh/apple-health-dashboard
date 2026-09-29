@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Righteous&family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600;700&display=swap" />
+    <title>Log a PR</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #85A383;
+        --card: #FBF6E9;
+        --card-border: #D9CBA4;
+        --ink: #3A322A;
+        --ink-strong: #26362B;
+        --ink-muted: #7A6F5C;
+        --hairline: #E9DFC4;
+        --accent: #3E7C7B;
+        --on-accent: #FFFFFF;
+        --error: #C1442D;
+      }
+      body {
+        margin: 0;
+        padding: 0 16px 64px;
+        background: var(--bg);
+        font-family: "Karla", sans-serif;
+        color: var(--ink);
+      }
+      .shell {
+        max-width: 480px;
+        margin: 0 auto;
+        padding-top: 26px;
+      }
+      h1 {
+        font-family: "Righteous", cursive;
+        font-size: 1.6rem;
+        font-weight: 400;
+        color: var(--ink-strong);
+        margin: 0 0 4px;
+      }
+      p.sub {
+        font-size: 0.8rem;
+        color: var(--ink);
+        margin: 0 0 20px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--card-border);
+        border-radius: 3px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        font-family: "DM Mono", monospace;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+        margin: 14px 0 4px;
+      }
+      label:first-of-type {
+        margin-top: 0;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        font-size: 1rem;
+        padding: 10px 10px;
+        border: 1px solid var(--card-border);
+        border-radius: 4px;
+        background: #fff;
+        color: var(--ink);
+      }
+      button {
+        appearance: none;
+        border: none;
+        background: var(--accent);
+        color: var(--on-accent);
+        font: inherit;
+        font-weight: 700;
+        font-size: 0.9rem;
+        padding: 12px;
+        border-radius: 4px;
+        width: 100%;
+        margin-top: 18px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+      }
+      #status {
+        font-size: 0.8rem;
+        margin-top: 12px;
+        min-height: 1.2em;
+      }
+      #status.error {
+        color: var(--error);
+      }
+      #status.ok {
+        color: var(--accent);
+      }
+      .data-table {
+        border-collapse: collapse;
+        font-size: 0.78rem;
+        width: 100%;
+      }
+      .data-table th,
+      .data-table td {
+        text-align: right;
+        padding: 7px 6px;
+        border-bottom: 1px solid var(--hairline);
+        font-family: "DM Mono", monospace;
+      }
+      .data-table th:first-child,
+      .data-table td:first-child {
+        text-align: left;
+      }
+      .data-table thead th {
+        font-family: "Karla", sans-serif;
+        font-size: 0.62rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--ink-muted);
+        border-bottom: 2px solid var(--ink-strong);
+      }
+      .del {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--ink-muted);
+        cursor: pointer;
+        font-size: 0.9rem;
+        width: auto;
+        padding: 0 0 0 6px;
+        margin: 0;
+      }
+      .muted {
+        color: var(--ink-muted);
+        font-size: 0.78rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <h1>Log a PR</h1>
+      <p class="sub">Adds straight to the dashboard's PRs tab.</p>
+
+      <form class="card" id="pr-form">
+        <label for="exercise">Exercise</label>
+        <input id="exercise" name="exercise" type="text" required placeholder="Deadlift" autocomplete="off" />
+
+        <label for="weight">Weight (lb)</label>
+        <input id="weight" name="weight" type="number" step="0.5" min="0" required inputmode="decimal" />
+
+        <label for="reps">Reps</label>
+        <input id="reps" name="reps" type="number" step="1" min="1" required inputmode="numeric" value="1" />
+
+        <label for="date">Date</label>
+        <input id="date" name="date" type="date" required />
+
+        <label for="passcode">Passcode</label>
+        <input id="passcode" name="passcode" type="password" required autocomplete="off" />
+
+        <button type="submit" id="submit-btn">Save PR</button>
+        <div id="status"></div>
+      </form>
+
+      <div class="card">
+        <p class="muted" style="margin-top:0">Existing PRs</p>
+        <div id="existing"></div>
+      </div>
+    </div>
+
+    <script>
+      const dateInput = document.getElementById("date");
+      dateInput.value = new Date().toISOString().slice(0, 10);
+
+      const statusEl = document.getElementById("status");
+      const existingEl = document.getElementById("existing");
+
+      function fmtDate(iso) {
+        return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      }
+
+      function renderExisting(records) {
+        if (!records.length) {
+          existingEl.innerHTML = '<p class="muted">No PRs logged yet.</p>';
+          return;
+        }
+        const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+        existingEl.innerHTML =
+          '<table class="data-table"><thead><tr><th>Exercise</th><th>Weight</th><th>Reps</th><th>Date</th><th></th></tr></thead><tbody>' +
+          sorted
+            .map(
+              (r) =>
+                "<tr><td>" + r.exercise + "</td><td>" + r.weight_lbs + " lb</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
+                '</td><td><button class="del" data-id="' + r.id + '" title="Delete">&times;</button></td></tr>',
+            )
+            .join("") +
+          "</tbody></table>";
+        existingEl.querySelectorAll(".del").forEach((btn) => {
+          btn.addEventListener("click", () => deleteRecord(btn.dataset.id));
+        });
+      }
+
+      async function loadExisting() {
+        try {
+          const res = await fetch("/api/prs");
+          renderExisting(await res.json());
+        } catch (err) {
+          existingEl.innerHTML = '<p class="muted">Couldn\'t load existing PRs.</p>';
+        }
+      }
+
+      async function deleteRecord(id) {
+        const passcode = document.getElementById("passcode").value;
+        if (!passcode) {
+          statusEl.textContent = "Enter your passcode above, then tap delete again.";
+          statusEl.className = "error";
+          return;
+        }
+        const res = await fetch("/api/prs?id=" + encodeURIComponent(id) + "&passcode=" + encodeURIComponent(passcode), { method: "DELETE" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          statusEl.textContent = body.error || "Couldn't delete that entry.";
+          statusEl.className = "error";
+          return;
+        }
+        renderExisting(await res.json());
+      }
+
+      document.getElementById("pr-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById("submit-btn");
+        btn.disabled = true;
+        statusEl.textContent = "Saving…";
+        statusEl.className = "";
+        try {
+          const res = await fetch("/api/prs", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              exercise: document.getElementById("exercise").value,
+              weight_lbs: Number(document.getElementById("weight").value),
+              reps: Number(document.getElementById("reps").value),
+              date: document.getElementById("date").value,
+              passcode: document.getElementById("passcode").value,
+            }),
+          });
+          const records = await res.json();
+          if (!res.ok) {
+            statusEl.textContent = records.error || "Something went wrong.";
+            statusEl.className = "error";
+            return;
+          }
+          statusEl.textContent = "Saved.";
+          statusEl.className = "ok";
+          document.getElementById("exercise").value = "";
+          document.getElementById("weight").value = "";
+          renderExisting(records);
+        } catch (err) {
+          statusEl.textContent = "Network error — try again.";
+          statusEl.className = "error";
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      loadExisting();
+    </script>
+  </body>
+</html>

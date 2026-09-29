@@ -1,0 +1,77 @@
+// Cloudflare Pages Function backing the PRs tab and the log-pr.html form.
+// GET returns all records (public, read-only, same data the deployed site
+// already shows). POST/DELETE require PR_PASSCODE (set via
+// `wrangler pages secret put PR_PASSCODE`) so a stumbled-on URL can't write
+// garbage into the log -- viewing the site was already fully public by
+// choice, but writes are a different risk than reads.
+
+interface KVNamespace {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+interface Env {
+  PRS_KV: KVNamespace;
+  PR_PASSCODE: string;
+}
+
+type PagesFunction<E> = (context: { request: Request; env: E }) => Response | Promise<Response>;
+
+type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string };
+
+const KEY = "records";
+const MAX_EXERCISE_LEN = 80;
+
+async function readRecords(env: Env): Promise<PRRecord[]> {
+  const raw = await env.PRS_KV.get(KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+  return json(await readRecords(env));
+};
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") return json({ error: "Invalid request body" }, 400);
+
+  const { passcode, exercise, weight_lbs, reps, date } = body as Record<string, unknown>;
+  if (!env.PR_PASSCODE || passcode !== env.PR_PASSCODE) {
+    return json({ error: "Incorrect passcode" }, 401);
+  }
+  const weightNum = Number(weight_lbs);
+  const repsNum = Number(reps);
+  if (typeof exercise !== "string" || !exercise.trim() || !Number.isFinite(weightNum) || !Number.isFinite(repsNum) || typeof date !== "string" || !date) {
+    return json({ error: "Missing or invalid fields" }, 400);
+  }
+
+  const records = await readRecords(env);
+  records.push({
+    id: crypto.randomUUID(),
+    exercise: exercise.trim().slice(0, MAX_EXERCISE_LEN),
+    weight_lbs: weightNum,
+    reps: Math.round(repsNum),
+    date,
+  });
+  await env.PRS_KV.put(KEY, JSON.stringify(records));
+  return json(records);
+};
+
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  const passcode = url.searchParams.get("passcode");
+  if (!env.PR_PASSCODE || passcode !== env.PR_PASSCODE) {
+    return json({ error: "Incorrect passcode" }, 401);
+  }
+  const records = (await readRecords(env)).filter((r) => r.id !== id);
+  await env.PRS_KV.put(KEY, JSON.stringify(records));
+  return json(records);
+};

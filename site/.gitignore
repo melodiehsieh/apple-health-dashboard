@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 public/data
+
+# wrangler local-dev secrets (real PR_PASSCODE lives in the Pages project's
+# secrets, set via `wrangler pages secret put` -- never committed).
+.dev.vars
+.wrangler

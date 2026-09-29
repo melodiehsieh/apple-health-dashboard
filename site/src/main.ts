@@ -1,6 +1,5 @@
 import * as Plot from "@observablehq/plot";
 import "./style.css";
-import prsData from "./prs.json";
 
 const ZONE_ORDER = ["Z1", "Z2", "Z3", "Z4", "Z5"];
 
@@ -618,16 +617,27 @@ function setupTimeSummary(data: SiteData) {
   renderTimeSummary();
 }
 
-// ---- Personal records: hand-maintained (Apple Health has no 1RM data),
-// edited directly in prs.json. ----
+// ---- Personal records: hand-maintained (Apple Health has no 1RM data).
+// Stored in Cloudflare KV via a Pages Function (functions/api/prs.ts),
+// logged from /log-pr.html on your phone -- no code changes or redeploys
+// needed to add one. ----
 
-type PRRecord = { exercise: string; weight_lbs: number; reps: number; date: string };
+type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string };
 
-function renderPRs() {
+async function renderPRs() {
   const el = document.querySelector<HTMLDivElement>("#prs-table")!;
-  const records = prsData as PRRecord[];
+  let records: PRRecord[];
+  try {
+    const res = await fetch("/api/prs");
+    if (!res.ok) throw new Error(`prs fetch failed: ${res.status}`);
+    records = await res.json();
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="muted">Couldn't load PRs — see console.</p>`;
+    return;
+  }
   if (records.length === 0) {
-    el.innerHTML = `<p class="muted">No PRs logged yet — add entries to <code>site/src/prs.json</code> (exercise, weight_lbs, reps, date) and they'll show up here.</p>`;
+    el.innerHTML = `<p class="muted">No PRs logged yet — log one at <a href="/log-pr.html">/log-pr.html</a> and it'll show up here.</p>`;
     return;
   }
   const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));

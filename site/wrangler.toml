@@ -1,0 +1,7 @@
+name = "apple-health-dashboard"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-26"
+
+[[kv_namespaces]]
+binding = "PRS_KV"
+id = "488168ad1ec341a48d33542432cb27da"
