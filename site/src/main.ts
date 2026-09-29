@@ -811,7 +811,12 @@ function setupTabs() {
   }
 
   buttons.forEach((btn) => {
-    btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+    btn.addEventListener("click", () => {
+      activateTab(btn.dataset.tab);
+      // Keep the URL bar in sync so the current tab can be bookmarked or
+      // shared, without piling up a history entry per click.
+      history.replaceState(null, "", `#${btn.dataset.tab}`);
+    });
   });
 
   // Deep-link support (e.g. a "back to dashboard" link from /log-pr that
