@@ -74,7 +74,8 @@
         border-radius: 5px;
         margin-bottom: 18px;
       }
-      input {
+      input,
+      textarea {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
@@ -84,6 +85,7 @@
         border-radius: 4px;
         background: #fff;
         color: var(--ink);
+        resize: vertical;
       }
       button {
         appearance: none;
@@ -152,6 +154,14 @@
         color: var(--ink-muted);
         font-size: 0.78rem;
       }
+      .pr-note {
+        font-family: "Karla", sans-serif;
+        font-size: 0.7rem;
+        color: var(--ink-muted);
+        font-weight: 400;
+        margin-top: 2px;
+        white-space: normal;
+      }
     </style>
   </head>
   <body>
@@ -172,6 +182,9 @@
 
         <label for="date">Date</label>
         <input id="date" name="date" type="date" required />
+
+        <label for="note">Notes (optional)</label>
+        <textarea id="note" name="note" rows="2" maxlength="280" placeholder="Belt, no wraps, felt strong"></textarea>
 
         <label for="passcode">Passcode</label>
         <input id="passcode" name="passcode" type="password" required autocomplete="off" />
@@ -197,6 +210,10 @@
         return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       }
 
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
       function renderExisting(records) {
         if (!records.length) {
           existingEl.innerHTML = '<p class="muted">No PRs logged yet.</p>';
@@ -208,7 +225,8 @@
           sorted
             .map(
               (r) =>
-                "<tr><td>" + r.exercise + "</td><td>" + r.weight_lbs + " lb</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
+                "<tr><td>" + escapeHtml(r.exercise) + (r.note ? '<div class="pr-note">' + escapeHtml(r.note) + "</div>" : "") +
+                "</td><td>" + r.weight_lbs + " lb</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
                 '</td><td><button class="del" data-id="' + r.id + '" title="Delete">&times;</button></td></tr>',
             )
             .join("") +
@@ -259,6 +277,7 @@
               weight_lbs: Number(document.getElementById("weight").value),
               reps: Number(document.getElementById("reps").value),
               date: document.getElementById("date").value,
+              note: document.getElementById("note").value,
               passcode: document.getElementById("passcode").value,
             }),
           });
@@ -272,6 +291,7 @@
           statusEl.className = "ok";
           document.getElementById("exercise").value = "";
           document.getElementById("weight").value = "";
+          document.getElementById("note").value = "";
           renderExisting(records);
         } catch (err) {
           statusEl.textContent = "Network error — try again.";

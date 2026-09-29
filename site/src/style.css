@@ -180,6 +180,15 @@ section {
   text-align: left;
 }
 
+.pr-note {
+  font-family: "Karla", sans-serif;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  font-weight: 400;
+  margin-top: 2px;
+  white-space: normal;
+}
+
 .data-table thead th {
   font-family: "Karla", sans-serif;
   font-size: 0.65rem;

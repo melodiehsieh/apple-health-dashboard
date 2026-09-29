@@ -17,10 +17,11 @@ interface Env {
 
 type PagesFunction<E> = (context: { request: Request; env: E }) => Response | Promise<Response>;
 
-type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string };
+type PRRecord = { id: string; exercise: string; weight_lbs: number; reps: number; date: string; note?: string };
 
 const KEY = "records";
 const MAX_EXERCISE_LEN = 80;
+const MAX_NOTE_LEN = 280;
 
 async function readRecords(env: Env): Promise<PRRecord[]> {
   const raw = await env.PRS_KV.get(KEY);
@@ -42,7 +43,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return json({ error: "Invalid request body" }, 400);
 
-  const { passcode, exercise, weight_lbs, reps, date } = body as Record<string, unknown>;
+  const { passcode, exercise, weight_lbs, reps, date, note } = body as Record<string, unknown>;
   if (!env.PR_PASSCODE || passcode !== env.PR_PASSCODE) {
     return json({ error: "Incorrect passcode" }, 401);
   }
@@ -52,6 +53,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return json({ error: "Missing or invalid fields" }, 400);
   }
 
+  const trimmedNote = typeof note === "string" ? note.trim().slice(0, MAX_NOTE_LEN) : "";
   const records = await readRecords(env);
   records.push({
     id: crypto.randomUUID(),
@@ -59,6 +61,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     weight_lbs: weightNum,
     reps: Math.round(repsNum),
     date,
+    ...(trimmedNote ? { note: trimmedNote } : {}),
   });
   await env.PRS_KV.put(KEY, JSON.stringify(records));
   return json(records);
