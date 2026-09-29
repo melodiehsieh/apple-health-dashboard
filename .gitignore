@@ -1,9 +1,13 @@
 .DS_Store
 node_modules/
 
-# Raw Apple Health exports and all processing outputs — never committed.
+# Raw Apple Health exports and most processing outputs — never committed.
 # See pipeline/README (or the process doc) for how to regenerate these locally.
-data/
+# site_data.json is the one exception: it's the small aggregated file the
+# deployed site serves directly (already fully public via the live site),
+# and CI needs it in the repo to build without access to local export data.
+data/*
+!data/site_data.json
 
 # Python
 __pycache__/
