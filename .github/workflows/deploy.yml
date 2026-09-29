@@ -34,4 +34,10 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: site
+          # Pinned to match the version tested locally with `wrangler pages
+          # dev` -- the action's own default silently fell back to 3.90.0
+          # (a major version behind) when its preferred version couldn't be
+          # fetched, which bundled Pages Functions differently and broke
+          # /api/prs routing in production while working fine locally.
+          wranglerVersion: "4.143.0"
           command: pages deploy dist --project-name=apple-health-dashboard
