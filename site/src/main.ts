@@ -637,7 +637,7 @@ async function renderPRs() {
     return;
   }
   if (records.length === 0) {
-    el.innerHTML = `<p class="muted">No PRs logged yet — log one at <a href="/log-pr.html">/log-pr.html</a> and it'll show up here.</p>`;
+    el.innerHTML = `<p class="muted">No PRs logged yet — log one at <a href="/log-pr">/log-pr</a> and it'll show up here.</p>`;
     return;
   }
   const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));

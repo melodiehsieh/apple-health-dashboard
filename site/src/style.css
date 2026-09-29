@@ -137,6 +137,22 @@ section {
   box-shadow: none;
 }
 
+.cta-button {
+  display: inline-block;
+  appearance: none;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: "Karla", sans-serif;
+  font-weight: 700;
+  font-size: 0.76rem;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 #pace-by-zone-table,
 #summary-table,
 #prs-table {
