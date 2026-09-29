@@ -35,7 +35,16 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  // ?verify=<passcode> checks a passcode without any side effect or
+  // exposing the real value -- used by log-pr.html's entry gate, so the
+  // list/form only render after a correct passcode, without needing a
+  // separate write-side-effect endpoint just to check it.
+  const url = new URL(request.url);
+  const verify = url.searchParams.get("verify");
+  if (verify !== null) {
+    return json({ ok: !!env.PR_PASSCODE && verify === env.PR_PASSCODE });
+  }
   return json(await readRecords(env));
 };
 

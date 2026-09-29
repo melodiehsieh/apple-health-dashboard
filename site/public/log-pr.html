@@ -104,12 +104,14 @@
       button:disabled {
         opacity: 0.6;
       }
-      #status {
+      #status,
+      #gate-status {
         font-size: 0.8rem;
         margin-top: 12px;
         min-height: 1.2em;
       }
-      #status.error {
+      #status.error,
+      #gate-status.error {
         color: var(--error);
       }
       #status.ok {
@@ -162,40 +164,56 @@
         margin-top: 2px;
         white-space: normal;
       }
+      #content[hidden],
+      #gate[hidden] {
+        display: none;
+      }
     </style>
   </head>
   <body>
     <div class="shell">
-      <h1>Log a PR</h1>
-      <p class="sub">Adds straight to the dashboard's PRs tab.</p>
-      <a class="back-link" href="/#prs">&larr; Back to dashboard</a>
+      <div id="gate">
+        <h1>Log a PR</h1>
+        <p class="sub">Enter your passcode to view or add PRs.</p>
+        <a class="back-link" href="/#prs">&larr; Back to dashboard</a>
 
-      <form class="card" id="pr-form">
-        <label for="exercise">Exercise</label>
-        <input id="exercise" name="exercise" type="text" required placeholder="Deadlift" autocomplete="off" />
+        <form class="card" id="gate-form">
+          <label for="gate-passcode">Passcode</label>
+          <input id="gate-passcode" type="password" required autocomplete="off" autofocus />
+          <button type="submit" id="gate-btn">Unlock</button>
+          <div id="gate-status"></div>
+        </form>
+      </div>
 
-        <label for="weight">Weight (lb)</label>
-        <input id="weight" name="weight" type="number" step="0.5" min="0" inputmode="decimal" placeholder="Leave blank for bodyweight (e.g. pull-ups)" />
+      <div id="content" hidden>
+        <h1>Log a PR</h1>
+        <p class="sub">Adds straight to the dashboard's PRs tab.</p>
+        <a class="back-link" href="/#prs">&larr; Back to dashboard</a>
 
-        <label for="reps">Reps</label>
-        <input id="reps" name="reps" type="number" step="1" min="1" required inputmode="numeric" value="1" />
+        <form class="card" id="pr-form">
+          <label for="exercise">Exercise</label>
+          <input id="exercise" name="exercise" type="text" required placeholder="Deadlift" autocomplete="off" />
 
-        <label for="date">Date</label>
-        <input id="date" name="date" type="date" required />
+          <label for="weight">Weight (lb)</label>
+          <input id="weight" name="weight" type="number" step="0.5" min="0" inputmode="decimal" placeholder="Leave blank for bodyweight (e.g. pull-ups)" />
 
-        <label for="note">Notes (optional)</label>
-        <textarea id="note" name="note" rows="2" maxlength="280" placeholder="Belt, no wraps, felt strong"></textarea>
+          <label for="reps">Reps</label>
+          <input id="reps" name="reps" type="number" step="1" min="1" required inputmode="numeric" value="1" />
 
-        <label for="passcode">Passcode</label>
-        <input id="passcode" name="passcode" type="password" required autocomplete="off" />
+          <label for="date">Date</label>
+          <input id="date" name="date" type="date" required />
 
-        <button type="submit" id="submit-btn">Save PR</button>
-        <div id="status"></div>
-      </form>
+          <label for="note">Notes (optional)</label>
+          <textarea id="note" name="note" rows="2" maxlength="280" placeholder="Belt, no wraps, felt strong"></textarea>
 
-      <div class="card">
-        <p class="muted" style="margin-top:0">Existing PRs</p>
-        <div id="existing"></div>
+          <button type="submit" id="submit-btn">Save PR</button>
+          <div id="status"></div>
+        </form>
+
+        <div class="card">
+          <p class="muted" style="margin-top:0">Existing PRs</p>
+          <div id="existing"></div>
+        </div>
       </div>
     </div>
 
@@ -205,6 +223,13 @@
 
       const statusEl = document.getElementById("status");
       const existingEl = document.getElementById("existing");
+      const gateEl = document.getElementById("gate");
+      const contentEl = document.getElementById("content");
+      const gateStatusEl = document.getElementById("gate-status");
+
+      // Set only after a correct passcode is verified server-side; nothing
+      // in #content is shown or fetched before that happens.
+      let verifiedPasscode = null;
 
       function fmtDate(iso) {
         return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -246,13 +271,7 @@
       }
 
       async function deleteRecord(id) {
-        const passcode = document.getElementById("passcode").value;
-        if (!passcode) {
-          statusEl.textContent = "Enter your passcode above, then tap delete again.";
-          statusEl.className = "error";
-          return;
-        }
-        const res = await fetch("/api/prs?id=" + encodeURIComponent(id) + "&passcode=" + encodeURIComponent(passcode), { method: "DELETE" });
+        const res = await fetch("/api/prs?id=" + encodeURIComponent(id) + "&passcode=" + encodeURIComponent(verifiedPasscode), { method: "DELETE" });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           statusEl.textContent = body.error || "Couldn't delete that entry.";
@@ -261,6 +280,33 @@
         }
         renderExisting(await res.json());
       }
+
+      document.getElementById("gate-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById("gate-btn");
+        const entered = document.getElementById("gate-passcode").value;
+        btn.disabled = true;
+        gateStatusEl.textContent = "Checking…";
+        gateStatusEl.className = "";
+        try {
+          const res = await fetch("/api/prs?verify=" + encodeURIComponent(entered));
+          const body = await res.json();
+          if (!body.ok) {
+            gateStatusEl.textContent = "Incorrect passcode.";
+            gateStatusEl.className = "error";
+            return;
+          }
+          verifiedPasscode = entered;
+          gateEl.hidden = true;
+          contentEl.hidden = false;
+          loadExisting();
+        } catch (err) {
+          gateStatusEl.textContent = "Network error — try again.";
+          gateStatusEl.className = "error";
+        } finally {
+          btn.disabled = false;
+        }
+      });
 
       document.getElementById("pr-form").addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -278,7 +324,7 @@
               reps: Number(document.getElementById("reps").value),
               date: document.getElementById("date").value,
               note: document.getElementById("note").value,
-              passcode: document.getElementById("passcode").value,
+              passcode: verifiedPasscode,
             }),
           });
           const records = await res.json();
@@ -300,8 +346,6 @@
           btn.disabled = false;
         }
       });
-
-      loadExisting();
     </script>
   </body>
 </html>
