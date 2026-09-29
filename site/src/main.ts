@@ -668,15 +668,24 @@ async function renderPRs() {
 function setupTabs() {
   const buttons = document.querySelectorAll<HTMLButtonElement>("#top-tabs button");
   const panels = document.querySelectorAll<HTMLElement>("[data-tab-panel]");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.tab;
-      buttons.forEach((b) => b.classList.toggle("active", b === btn));
-      panels.forEach((p) => {
-        p.hidden = p.dataset.tabPanel !== tab;
-      });
+
+  function activateTab(tab: string | undefined) {
+    const btn = [...buttons].find((b) => b.dataset.tab === tab);
+    if (!btn) return;
+    buttons.forEach((b) => b.classList.toggle("active", b === btn));
+    panels.forEach((p) => {
+      p.hidden = p.dataset.tabPanel !== tab;
     });
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
+
+  // Deep-link support (e.g. a "back to dashboard" link from /log-pr that
+  // wants to land back on the PRs tab specifically): #prs, #calendar, etc.
+  const hashTab = location.hash.replace(/^#/, "");
+  if (hashTab) activateTab(hashTab);
 }
 
 // ---- Workout calendar ----
