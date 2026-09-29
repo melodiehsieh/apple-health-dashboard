@@ -587,33 +587,21 @@ function setupCalendarTooltip() {
   grid.addEventListener("mouseleave", hide);
 }
 
-// ---- Workout volume heatmap: trailing 12 months, color = total minutes
-// that day (not type), so a year fits in the space the month grid above
-// uses for four weeks. Complements the calendar rather than replacing it --
-// good for spotting streaks/gaps, with the same hover detail. ----
+// ---- Heatmaps: trailing 12 months, one cell per day, so a year fits in
+// the space the month grid above uses for four weeks. Two variants share
+// the same grid/alignment/tooltip scaffold: volume (color = total minutes)
+// and type (color = category, split into bands on a multi-category day). ----
 
 const HEATMAP_COLOR_STOPS = ["#E9DFC4", "#C9DBC3", "#8FB386", "#5C8158", "#2E4A2A"];
 
-function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
-  const dailyTotal = new Map<string, number>();
-  for (const w of workouts) {
-    dailyTotal.set(w.date, (dailyTotal.get(w.date) ?? 0) + (w.duration_min ?? 0));
-  }
-  const maxMin = Math.max(1, ...dailyTotal.values());
-  function colorFor(mins: number): string {
-    if (!mins) return HEATMAP_COLOR_STOPS[0];
-    const t = Math.min(1, mins / maxMin);
-    const idx = Math.min(HEATMAP_COLOR_STOPS.length - 1, Math.floor(t * (HEATMAP_COLOR_STOPS.length - 1)) + 1);
-    return HEATMAP_COLOR_STOPS[idx];
-  }
-
+function buildHeatmapGrid(monthsId: string, gridId: string, endDate: Date, backgroundFor: (iso: string) => string) {
   const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
   const start = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate() + 1);
   const startAligned = new Date(start);
   startAligned.setDate(startAligned.getDate() - startAligned.getDay());
 
-  const monthsRow = document.querySelector<HTMLDivElement>("#heatmap-months")!;
-  const grid = document.querySelector<HTMLDivElement>("#heatmap-grid")!;
+  const monthsRow = document.querySelector<HTMLDivElement>(`#${monthsId}`)!;
+  const grid = document.querySelector<HTMLDivElement>(`#${gridId}`)!;
   monthsRow.innerHTML = "";
   grid.innerHTML = "";
 
@@ -633,7 +621,7 @@ function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
     const cell = document.createElement("div");
     cell.className = "heatmap-cell";
     if (cur >= start && cur <= end) {
-      cell.style.background = colorFor(dailyTotal.get(iso) ?? 0);
+      cell.style.background = backgroundFor(iso);
       cell.dataset.date = iso;
     } else {
       cell.style.background = "transparent";
@@ -650,7 +638,7 @@ function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
     const dayWorkouts = dateStr ? workoutsByDate.get(dateStr) : undefined;
     if (!cell || !dateStr) { hide(); return; }
     const dateLabel = parseLocalDate(dateStr).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-    const totalMin = Math.round(dailyTotal.get(dateStr) ?? 0);
+    const totalMin = Math.round((dayWorkouts ?? []).reduce((sum, w) => sum + (w.duration_min ?? 0), 0));
     const rows = (dayWorkouts ?? [])
       .map((w) => {
         const metric = workoutMetricLabel(w);
@@ -667,6 +655,59 @@ function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
     tooltip.style.top = `${Math.max(4, top)}px`;
   });
   grid.addEventListener("mouseleave", hide);
+}
+
+function renderWorkoutHeatmap(workouts: WorkoutEntry[], endDate: Date) {
+  const dailyTotal = new Map<string, number>();
+  for (const w of workouts) {
+    dailyTotal.set(w.date, (dailyTotal.get(w.date) ?? 0) + (w.duration_min ?? 0));
+  }
+  const maxMin = Math.max(1, ...dailyTotal.values());
+  function colorFor(iso: string): string {
+    const mins = dailyTotal.get(iso) ?? 0;
+    if (!mins) return HEATMAP_COLOR_STOPS[0];
+    const t = Math.min(1, mins / maxMin);
+    const idx = Math.min(HEATMAP_COLOR_STOPS.length - 1, Math.floor(t * (HEATMAP_COLOR_STOPS.length - 1)) + 1);
+    return HEATMAP_COLOR_STOPS[idx];
+  }
+  buildHeatmapGrid("heatmap-months", "heatmap-grid", endDate, colorFor);
+}
+
+// Same fixed category order every time (Cardio, Strength, Racquet Sports,
+// Mind & Recovery, Outdoor & Other) so two days sharing the same
+// combination of categories always split into the same order -- duration
+// only decides which 3 survive on a day with more than 3, never the
+// display order.
+function splitCategoriesForDay(dateStr: string): string[] {
+  const items = workoutsByDate.get(dateStr) ?? [];
+  const durationByCategory = new Map<(typeof CATEGORIES)[number], number>();
+  for (const w of items) {
+    const c = categoryOf(w.type);
+    durationByCategory.set(c, (durationByCategory.get(c) ?? 0) + (w.duration_min ?? 0));
+  }
+  const survivors = [...durationByCategory.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([c]) => c);
+  const kept = new Set(survivors);
+  return CATEGORIES.filter((c) => kept.has(c)).map((c) => c.color);
+}
+
+function renderWorkoutTypeHeatmap(endDate: Date) {
+  function backgroundFor(iso: string): string {
+    const colors = splitCategoriesForDay(iso);
+    if (colors.length === 0) return HEATMAP_COLOR_STOPS[0];
+    if (colors.length === 1) return colors[0];
+    const step = 100 / colors.length;
+    const stops = colors.map((c, i) => `${c} ${i * step}% ${(i + 1) * step}%`);
+    return `linear-gradient(to bottom, ${stops.join(", ")})`;
+  }
+  buildHeatmapGrid("type-heatmap-months", "type-heatmap-grid", endDate, backgroundFor);
+
+  const legend = document.querySelector<HTMLDivElement>("#type-heatmap-legend")!;
+  legend.innerHTML = CATEGORIES.map(
+    (c) => `<div class="calendar-legend-item"><span class="calendar-legend-swatch" style="background:${c.color}"></span>${c.name}</div>`,
+  ).join("");
 }
 
 function setupCalendar(data: SiteData) {
@@ -697,6 +738,7 @@ function setupCalendar(data: SiteData) {
   renderCalendar();
   setupCalendarTooltip();
   renderWorkoutHeatmap(data.workouts, maxDate);
+  renderWorkoutTypeHeatmap(maxDate);
 }
 
 function formatSummary(s: SiteData["summary"]): string {
