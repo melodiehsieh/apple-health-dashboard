@@ -1,0 +1,3 @@
+# Serve the dashboard at /health too, alongside the root domain.
+/health   /index.html   200
+/health/  /index.html   200
