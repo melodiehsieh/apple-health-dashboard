@@ -82,6 +82,14 @@ h3 {
   margin: 0 0 16px;
 }
 
+.blurb {
+  max-width: 640px;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--ink);
+  margin: 0 0 10px;
+}
+
 section {
   margin-top: 0;
 }
