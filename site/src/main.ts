@@ -750,39 +750,42 @@ function setupTimeSummary(data: SiteData) {
 // logged from /log-pr.html on your phone -- no code changes or redeploys
 // needed to add one. ----
 
-type PRRecord = { id: string; exercise: string; weight_lbs: number | null; reps: number; date: string; note?: string };
+type PRCategory = "push" | "pull" | "legs" | "other";
+type PRRecord = { id: string; exercise: string; weight_lbs: number | null; reps: number; date: string; note?: string; category?: PRCategory };
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-async function renderPRs() {
+function fmtCategory(c: PRCategory | undefined): string {
+  return c ? c.charAt(0).toUpperCase() + c.slice(1) : "—";
+}
+
+let prRecords: PRRecord[] = [];
+let prCategoryFilter = "all";
+
+function renderPRsTable() {
   const el = document.querySelector<HTMLDivElement>("#prs-table")!;
-  let records: PRRecord[];
-  try {
-    const res = await fetch("/api/prs");
-    if (!res.ok) throw new Error(`prs fetch failed: ${res.status}`);
-    records = await res.json();
-  } catch (err) {
-    console.error(err);
-    el.innerHTML = `<p class="muted">Couldn't load PRs — see console.</p>`;
-    return;
-  }
+  const records = prCategoryFilter === "all" ? prRecords : prRecords.filter((r) => (r.category ?? "other") === prCategoryFilter);
   if (records.length === 0) {
-    el.innerHTML = `<p class="muted">No PRs logged yet — log one at <a href="/log-pr">/log-pr</a> and it'll show up here.</p>`;
+    el.innerHTML =
+      prRecords.length === 0
+        ? `<p class="muted">No PRs logged yet — log one at <a href="/log-pr">/log-pr</a> and it'll show up here.</p>`
+        : `<p class="muted">No PRs in this category yet.</p>`;
     return;
   }
   const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
   const table = document.createElement("table");
   table.className = "data-table";
   table.innerHTML = `
-    <thead><tr><th>Exercise</th><th>Weight</th><th>Reps</th><th>Date</th></tr></thead>
+    <thead><tr><th>Exercise</th><th>Category</th><th>Weight</th><th>Reps</th><th>Date</th></tr></thead>
     <tbody>
       ${sorted
         .map(
           (r) => `
         <tr>
           <td>${escapeHtml(r.exercise)}${r.note ? `<div class="pr-note">${escapeHtml(r.note)}</div>` : ""}</td>
+          <td>${fmtCategory(r.category)}</td>
           <td>${r.weight_lbs != null ? `${r.weight_lbs} lb` : "—"}</td>
           <td>${r.reps}</td>
           <td>${parseLocalDate(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
@@ -793,6 +796,31 @@ async function renderPRs() {
   `;
   el.innerHTML = "";
   el.append(table);
+}
+
+function setupPRsFilter() {
+  const buttons = document.querySelectorAll<HTMLButtonElement>("#prs-filter button");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      prCategoryFilter = btn.dataset.category!;
+      buttons.forEach((b) => b.classList.toggle("active", b === btn));
+      renderPRsTable();
+    });
+  });
+}
+
+async function renderPRs() {
+  const el = document.querySelector<HTMLDivElement>("#prs-table")!;
+  try {
+    const res = await fetch("/api/prs");
+    if (!res.ok) throw new Error(`prs fetch failed: ${res.status}`);
+    prRecords = await res.json();
+  } catch (err) {
+    console.error(err);
+    el.innerHTML = `<p class="muted">Couldn't load PRs — see console.</p>`;
+    return;
+  }
+  renderPRsTable();
 }
 
 // ---- Top-level tabs ----
@@ -1118,6 +1146,7 @@ async function main() {
   const summaryEl = document.querySelector<HTMLParagraphElement>("#summary")!;
 
   setupTabs();
+  setupPRsFilter();
   paceRange = setupRangeSelector("pace-range-selector", (range) => {
     paceRange = range;
     if (siteData) {

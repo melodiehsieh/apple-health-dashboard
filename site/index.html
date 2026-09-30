@@ -12,12 +12,12 @@
         <h1>Activity Tracking</h1>
         <p class="blurb">
           <strong>Personal Project:</strong> Apple's Health and Activity
-          apps don't show the stats I want to see, so I built my own. I
-          exported 5.6 million lines of raw XML Health data, parsed it into
-          Parquet, and charted things like heatmaps of workout volume/type,
-          pace on repeat routes, pace by heart-rate zone, workout type
-          distribution with custom categories, gym PRs, and other stats
-          <strong>exactly how I want to see them.</strong>
+          apps don't show the stats I want to see, so I built my own custom
+          app. I exported 5.6 million lines of raw XML Health data, parsed
+          it into Parquet, and charted things like heatmaps of workout
+          volume/type, pace on repeat routes, pace by heart-rate zone,
+          workout type distribution with custom categories, gym PRs, and
+          other stats <strong>exactly how I want to see them!</strong>
         </p>
         <p id="summary" class="muted">Loading&hellip;</p>
       </header>
@@ -244,6 +244,13 @@
                 <p class="cardsub">max lifts, tracked by hand</p>
               </div>
               <a href="/log-pr" class="cta-button">Log PR</a>
+            </div>
+            <div id="prs-filter" class="segmented">
+              <button data-category="all" class="active">All</button>
+              <button data-category="push">Push</button>
+              <button data-category="pull">Pull</button>
+              <button data-category="legs">Legs</button>
+              <button data-category="other">Other</button>
             </div>
             <div id="prs-table"></div>
           </div>

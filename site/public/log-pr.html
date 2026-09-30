@@ -75,7 +75,8 @@
         margin-bottom: 18px;
       }
       input,
-      textarea {
+      textarea,
+      select {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
@@ -201,6 +202,14 @@
           <label for="reps">Reps</label>
           <input id="reps" name="reps" type="number" step="1" min="1" required inputmode="numeric" value="1" />
 
+          <label for="category">Category</label>
+          <select id="category" name="category" required>
+            <option value="push">Push</option>
+            <option value="pull">Pull</option>
+            <option value="legs">Legs</option>
+            <option value="other">Other</option>
+          </select>
+
           <label for="date">Date</label>
           <input id="date" name="date" type="date" required />
 
@@ -240,6 +249,10 @@
         return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       }
 
+      function fmtCategory(c) {
+        return c ? c.charAt(0).toUpperCase() + c.slice(1) : "—";
+      }
+
       function renderExisting(records) {
         if (!records.length) {
           existingEl.innerHTML = '<p class="muted">No PRs logged yet.</p>';
@@ -247,11 +260,12 @@
         }
         const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
         existingEl.innerHTML =
-          '<table class="data-table"><thead><tr><th>Exercise</th><th>Weight</th><th>Reps</th><th>Date</th><th></th></tr></thead><tbody>' +
+          '<table class="data-table"><thead><tr><th>Exercise</th><th>Category</th><th>Weight</th><th>Reps</th><th>Date</th><th></th></tr></thead><tbody>' +
           sorted
             .map(
               (r) =>
                 "<tr><td>" + escapeHtml(r.exercise) + (r.note ? '<div class="pr-note">' + escapeHtml(r.note) + "</div>" : "") +
+                "</td><td>" + fmtCategory(r.category) +
                 "</td><td>" + (r.weight_lbs != null ? r.weight_lbs + " lb" : "—") + "</td><td>" + r.reps + "</td><td>" + fmtDate(r.date) +
                 '</td><td><button class="del" data-id="' + r.id + '" title="Delete">&times;</button></td></tr>',
             )
@@ -323,6 +337,7 @@
               exercise: document.getElementById("exercise").value,
               weight_lbs: document.getElementById("weight").value ? Number(document.getElementById("weight").value) : null,
               reps: Number(document.getElementById("reps").value),
+              category: document.getElementById("category").value,
               date: document.getElementById("date").value,
               note: document.getElementById("note").value,
               passcode: verifiedPasscode,

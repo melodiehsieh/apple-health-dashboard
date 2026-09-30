@@ -161,6 +161,10 @@ section {
   white-space: nowrap;
 }
 
+#prs-filter {
+  margin: 4px 0 14px;
+}
+
 #pace-by-zone-table,
 #summary-table,
 #prs-table {
