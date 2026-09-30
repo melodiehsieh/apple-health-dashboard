@@ -7,12 +7,23 @@ on:
       - "site/**"
       - "data/site_data.json"
       - ".github/workflows/deploy.yml"
+  # Re-deploy on demand (Actions tab -> Run workflow), e.g. after the homepage repo changes.
+  workflow_dispatch:
+  repository_dispatch:
+    types: [homepage-updated]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The homepage (served at melodiehsieh.com) is built and versioned in its own repo.
+      - name: Check out the homepage
+        uses: actions/checkout@v4
+        with:
+          repository: melodiehsieh/melodiehsieh-home
+          path: homepage
 
       - uses: actions/setup-node@v4
         with:
@@ -27,6 +38,11 @@ jobs:
       - name: Build
         working-directory: site
         run: npm run build
+
+      # Dashboard is built into dist/health (served at /health/); the homepage goes at dist/ root.
+      - name: Add the homepage at the site root
+        working-directory: site
+        run: bash scripts/assemble-homepage.sh
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

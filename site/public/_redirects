@@ -1,6 +1,0 @@
-# Serve the dashboard at /health too, alongside the root domain.
-# (Rewrite target must be "/", not "/index.html" -- Cloudflare's asset
-# server auto-redirects any request resolving to literal index.html back
-# to "/", which clobbers the rewrite and drops the /health path.)
-/health   /   200
-/health/  /   200
