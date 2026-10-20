@@ -1115,7 +1115,7 @@ function setupCalendar(data: SiteData) {
     data.workouts[0]?.date ?? new Date().toISOString().slice(0, 10),
   );
   const maxDate = parseLocalDate(maxDateStr);
-  calendarMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+  calendarMonth = new Date(2026, 8, 1); // September 2026
 
   document.querySelector("#calendar-prev")!.addEventListener("click", () => {
     calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
