@@ -36,8 +36,9 @@ h1 {
   font-size: 1.85rem;
   font-weight: 400;
   color: var(--ink-strong);
-  line-height: 1;
-  letter-spacing: 0.01em;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
   margin: 0 0 6px;
 }
 
@@ -47,6 +48,7 @@ h2 {
   font-size: 1.05rem;
   color: var(--ink-strong);
   letter-spacing: -0.01em;
+  text-wrap: balance;
   margin: 0 0 3px;
 }
 
@@ -285,9 +287,16 @@ section {
 .tabs {
   display: flex;
   gap: 26px;
-  margin: 20px 0 28px;
+  margin: 8px 0 28px;
+  padding-top: 12px;
   border-bottom: 1.5px solid var(--hairline);
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
 }
 
 .tabs button {
@@ -326,7 +335,9 @@ section {
 }
 
 #calendar-prev,
-#calendar-next {
+#calendar-next,
+#summary-prev,
+#summary-next {
   appearance: none;
   border: none;
   background: var(--hairline);
@@ -483,7 +494,10 @@ section {
   position: fixed;
   z-index: 1000;
   pointer-events: none;
-  background: var(--ink-strong);
+  background: color-mix(in srgb, var(--ink-strong) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  backdrop-filter: blur(10px) saturate(150%);
+  animation: tooltip-in 90ms ease-out;
   color: var(--card);
   border-radius: 8px;
   padding: 8px 10px;
@@ -595,5 +609,159 @@ section {
   .calendar-day {
     min-height: 58px;
     padding: 3px;
+  }
+}
+
+/* ---- Interaction feel ---- */
+
+/* Respond on press, not release; the transform is instant and reverses on release. */
+.tabs button,
+.segmented button,
+.cta-button,
+#calendar-prev,
+#calendar-next,
+#summary-prev,
+#summary-next,
+.route-tab {
+  transition:
+    transform 100ms ease-out,
+    background-color 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabs button:active,
+.segmented button:active,
+.cta-button:active,
+#calendar-prev:active,
+#calendar-next:active,
+#summary-prev:active,
+#summary-next:active,
+.route-tab:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) {
+  .tabs button:not(.active):hover,
+  .segmented button:not(.active):hover {
+    color: var(--ink-strong);
+  }
+
+  .cta-button:hover {
+    filter: brightness(1.08);
+  }
+
+  #calendar-prev:hover,
+  #calendar-next:hover,
+  #summary-prev:hover,
+  #summary-next:hover {
+    background: var(--card-border);
+  }
+
+  .heatmap-cell {
+    transition: transform 90ms ease-out;
+  }
+
+  .heatmap-cell:hover {
+    transform: scale(1.35);
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0 0 1.5px var(--ink-strong);
+  }
+
+  .pie-svg path:hover,
+  .pie-svg circle:hover {
+    transform: scale(1.04);
+  }
+}
+
+.pie-svg path,
+.pie-svg circle {
+  transition: transform 120ms ease-out;
+  transform-origin: 54px 54px;
+}
+
+/* Tab panels ease in after the first tab switch (not on page load). */
+body.tabs-interacted [data-tab-panel]:not([hidden]) {
+  animation: panel-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes panel-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.tabs-interacted [data-tab-panel]:not([hidden]) {
+    animation: panel-fade 150ms ease;
+  }
+
+  .hover-tooltip {
+    animation: none;
+  }
+
+  .tabs button:active,
+  .segmented button:active,
+  .cta-button:active,
+  #calendar-prev:active,
+  #calendar-next:active,
+  #summary-prev:active,
+  #summary-next:active,
+  .route-tab:active,
+  .heatmap-cell:hover,
+  .pie-svg path:hover,
+  .pie-svg circle:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .tabs {
+    background: var(--bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .hover-tooltip {
+    background: var(--ink-strong);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .tabs {
+    background: var(--bg);
+    border-bottom-color: var(--ink-strong);
+  }
+}
+
+/* Phones: keep the sticky tab bar to one row instead of wrapping to two. */
+@media (max-width: 560px) {
+  .tabs {
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .tabs button {
+    font-size: 0.64rem;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
   }
 }

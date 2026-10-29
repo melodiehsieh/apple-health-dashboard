@@ -840,6 +840,7 @@ function setupTabs() {
 
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
+      document.body.classList.add("tabs-interacted");
       activateTab(btn.dataset.tab);
       // Keep the URL bar in sync so the current tab can be bookmarked or
       // shared, without piling up a history entry per click.
